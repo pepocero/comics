@@ -90,6 +90,7 @@ export function MegaBrowser({
   onForgetReading,
   continueReadingBusy,
 }: Props) {
+  const [navOpen, setNavOpen] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadingTree, setLoadingTree] = useState(true)
   const [opening, setOpening] = useState<string | null>(null)
@@ -190,6 +191,7 @@ export function MegaBrowser({
       try {
         let buffer: ArrayBuffer
         const cached = await getCachedComic(id)
+        const fromCache = !!cached?.data
         if (cached?.data) {
           buffer = cached.data
         } else {
@@ -197,21 +199,6 @@ export function MegaBrowser({
           buffer = await downloadMegaFileToArrayBuffer(file, (percent) => {
             setDownloadProgress({ name, percent })
           })
-          const size = file.size ?? buffer.byteLength
-          await putCachedComic({
-            id,
-            megaNodeId: file.nodeId ?? '',
-            name,
-            size,
-            downloadedAt: Date.now(),
-            data: buffer,
-          })
-          setCachedIdSet((prev) => {
-            const next = new Set(prev)
-            next.add(id)
-            return next
-          })
-          refreshCacheInfo()
         }
 
         const extracted = await extractComicPages(buffer, name)
@@ -220,6 +207,30 @@ export function MegaBrowser({
           url: URL.createObjectURL(p.blob),
         }))
         onOpenComic(name, pages, { megaCacheId: id })
+
+        if (!fromCache) {
+          const size = file.size ?? buffer.byteLength
+          void putCachedComic({
+            id,
+            megaNodeId: file.nodeId ?? '',
+            name,
+            size,
+            downloadedAt: Date.now(),
+            data: buffer,
+          })
+            .then(() => {
+              setCachedIdSet((prev) => {
+                const next = new Set(prev)
+                next.add(id)
+                return next
+              })
+              refreshCacheInfo()
+            })
+            .catch((e: unknown) => {
+              const msg = e instanceof Error ? e.message : String(e)
+              setToast(`No se pudo guardar en caché (${msg}). El cómic ya está abierto.`)
+            })
+        }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         setToast(msg || 'Error al abrir el archivo.')
@@ -240,6 +251,8 @@ export function MegaBrowser({
       setToast('Caché vaciada.')
     })
   }, [refreshCacheInfo])
+
+  const closeNav = useCallback(() => setNavOpen(false), [])
 
   if (loadingTree) {
     return (
@@ -265,16 +278,6 @@ export function MegaBrowser({
           busy={continueReadingBusy}
         />
         <p className="error-msg">{loadError}</p>
-        {loadError.includes('después de #') ? (
-          <p className="muted env-hash-hint">
-            Si usas un archivo <code>.env</code>, el <code>#</code> del enlace se corta salvo que pongas
-            la URL entre comillas:{' '}
-            <code>
-              VITE_MEGA_FOLDER_URL_1=&quot;https://mega.nz/folder/…#…&quot;
-            </code>
-            . Reinicia <code>npm run dev</code> tras guardar.
-          </p>
-        ) : null}
         <div className="btn-row">
           <LocalComicOpenButton variant="header" onOpen={onOpenLocalComic} />
           {onChangeSource ? (
@@ -283,7 +286,7 @@ export function MegaBrowser({
             </button>
           ) : null}
           <button type="button" onClick={onOpenSettings}>
-            {onChangeSource ? 'Ayuda / entorno' : 'Editar enlace'}
+            Ajustes
           </button>
         </div>
       </div>
@@ -298,37 +301,106 @@ export function MegaBrowser({
     .map((f) => f.name || '…')
     .join(' / ')
 
+  const navActions = (
+    <>
+      <span className="cache-badge" title="Espacio usado en caché">
+        Caché: {formatBytes(cacheBytes)}
+      </span>
+      <button
+        type="button"
+        className="btn-secondary"
+        onClick={() => {
+          goUp()
+          closeNav()
+        }}
+        disabled={breadcrumbs.length <= 1}
+      >
+        Subir
+      </button>
+      <button
+        type="button"
+        className="btn-secondary"
+        onClick={() => {
+          handleClearCache()
+          closeNav()
+        }}
+      >
+        Vaciar caché
+      </button>
+      <LocalComicOpenButton
+        variant="header"
+        onOpen={(p) => {
+          closeNav()
+          onOpenLocalComic(p)
+        }}
+        disabled={!!opening}
+      />
+      {onChangeSource ? (
+        <button
+          type="button"
+          className="btn-secondary"
+          onClick={() => {
+            onChangeSource()
+            closeNav()
+          }}
+        >
+          Cambiar fuente
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="btn-secondary"
+        onClick={() => {
+          onOpenSettings()
+          closeNav()
+        }}
+      >
+        Ajustes
+      </button>
+    </>
+  )
+
   return (
     <div className="browser">
       <header className="browser-header">
         <div className="browser-path" title={pathLabel}>
           {pathLabel}
         </div>
-        <div className="browser-actions">
-          <span className="cache-badge" title="Espacio usado en caché">
-            Caché: {formatBytes(cacheBytes)}
-          </span>
-          <button type="button" className="btn-secondary" onClick={goUp} disabled={breadcrumbs.length <= 1}>
-            Subir
-          </button>
-          <button type="button" className="btn-secondary" onClick={handleClearCache}>
-            Vaciar caché
-          </button>
-          <LocalComicOpenButton
-            variant="header"
-            onOpen={onOpenLocalComic}
-            disabled={!!opening}
-          />
-          {onChangeSource ? (
-            <button type="button" className="btn-secondary" onClick={onChangeSource}>
-              Cambiar fuente
-            </button>
-          ) : null}
-          <button type="button" className="btn-secondary" onClick={onOpenSettings}>
-            {onChangeSource ? 'Ayuda / entorno' : 'Enlace MEGA'}
-          </button>
-        </div>
+        <div className="browser-actions browser-actions--desktop">{navActions}</div>
       </header>
+
+      <button
+        type="button"
+        className="browser-burger-fab"
+        onClick={() => setNavOpen(true)}
+        aria-label="Abrir menú"
+        aria-expanded={navOpen}
+      >
+        ☰
+      </button>
+
+      {navOpen ? (
+        <div
+          className="browser-drawer-backdrop"
+          role="presentation"
+          onClick={closeNav}
+        >
+          <aside
+            className="browser-drawer"
+            role="dialog"
+            aria-label="Menú"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="browser-drawer-head">
+              <strong>Menú</strong>
+              <button type="button" className="browser-drawer-close" onClick={closeNav} aria-label="Cerrar menú">
+                ✕
+              </button>
+            </div>
+            <div className="browser-drawer-actions">{navActions}</div>
+          </aside>
+        </div>
+      ) : null}
 
       <ContinueReadingSection
         hidden={continueReadingHidden}

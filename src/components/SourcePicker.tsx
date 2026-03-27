@@ -57,11 +57,6 @@ export function SourcePicker({
         o
       </p>
       <LocalComicOpenButton variant="panel" onOpen={onOpenLocalComic} />
-      <p className="muted source-picker-foot">
-        Las direcciones se configuran en variables de entorno (
-        <code>VITE_MEGA_FOLDER_URL_1</code> … <code>_3</code>). En Cloudflare Pages,
-        defínelas en Settings → Variables and Secrets.
-      </p>
     </section>
   )
 }

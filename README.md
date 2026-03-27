@@ -15,7 +15,7 @@ PWA para listar una carpeta compartida de MEGA, descargar cómics y leerlos en e
 4. **Sin `.env`:** puedes pegar un único enlace en la pantalla inicial (solo `localStorage`).
 5. **Compatibilidad:** `VITE_MEGA_FOLDER_URL` (una sola URL) sigue funcionando si no usas `_1` … `_3`.
 
-**Cloudflare Pages:** en el proyecto → Settings → Variables and Secrets, añade las mismas variables `VITE_*` para Production (y Preview si aplica). Vuelve a desplegar tras cambiarlas.
+En el hosting, configura las mismas variables `VITE_*` que en el entorno de build y vuelve a desplegar si las cambias.
 
 ## Desarrollo
 

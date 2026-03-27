@@ -41,15 +41,8 @@ export function SettingsPanel({ onSaved, onCancel }: Props) {
       <section className="panel settings-panel">
         <h1>ComicRead</h1>
         <p className="lead">
-          Las carpetas MEGA están definidas en variables de entorno (
-          <code>VITE_MEGA_FOLDER_URL_1</code>, <code>_2</code>, <code>_3</code>). En local,
-          cópialas en <code>.env</code>: cada URL debe ir <strong>entre comillas</strong> porque el{' '}
-          <code>#</code> de la clave MEGA se pierde si no (el parser lo toma como comentario).
-          En Cloudflare Pages, pega el enlace completo en el valor de la variable.
-        </p>
-        <p className="lead">
-          Para cambiar de cuenta usa el botón <strong>Cambiar fuente</strong> en la cabecera
-          del listado de archivos.
+          Las carpetas MEGA están configuradas en la aplicación. Para cambiar de cuenta usa el menú
+          (icono <strong>☰</strong>) en la lista de archivos y la opción <strong>Cambiar fuente</strong>.
         </p>
         <div className="btn-row">
           {onCancel ? (
@@ -72,8 +65,6 @@ export function SettingsPanel({ onSaved, onCancel }: Props) {
       <h1>ComicRead</h1>
       <p className="lead">
         Pega el enlace completo de la carpeta de MEGA (incluye la parte después <code>#</code>).
-        También puedes definir <code>VITE_MEGA_FOLDER_URL_1</code> … <code>_3</code> en{' '}
-        <code>.env</code> o en Cloudflare Pages.
       </p>
       <form onSubmit={handleSubmit}>
         <label htmlFor="mega-url">Enlace de carpeta MEGA</label>
