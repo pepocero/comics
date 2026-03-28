@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  clearMegaLibraryEntered,
   getConfiguredMegaSources,
   getMegaFolderUrl,
   hasEnvMegaSources,
+  isMegaLibraryEntered,
   needsSourceSelection,
+  setMegaLibraryEntered,
 } from './config/megaSettings'
 import { SettingsPanel } from './components/SettingsPanel'
 import { SourcePicker } from './components/SourcePicker'
@@ -12,6 +15,13 @@ import { ComicViewer, type ViewerPage } from './components/ComicViewer'
 import type { LocalComicOpenPayload } from './components/LocalComicOpenButton'
 import { PwaUpdateGate } from './components/PwaUpdateGate'
 import type { ViewerSession } from './lib/readingProgress'
+import {
+  deleteCachedComic,
+  estimateCacheBytes,
+  listCachedComicMeta,
+} from './lib/comicStorage'
+import type { CachedComicMeta } from './lib/megaCachedViewer'
+import { loadViewerPagesFromMegaCache } from './lib/megaCachedViewer'
 import {
   buildProgressFromViewer,
   clearReadingProgress,
@@ -37,6 +47,10 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [viewer, setViewer] = useState<ViewerState | null>(null)
   const [continueBusy, setContinueBusy] = useState(false)
+  const [homeDownloads, setHomeDownloads] = useState<CachedComicMeta[]>([])
+  const [homeCacheBytes, setHomeCacheBytes] = useState(0)
+  const [homeOpeningId, setHomeOpeningId] = useState<string | null>(null)
+  const [homeToast, setHomeToast] = useState<string | null>(null)
 
   const viewerRef = useRef<ViewerState | null>(null)
   const lastPageIndexRef = useRef(0)
@@ -48,9 +62,27 @@ export default function App() {
 
   const sources = getConfiguredMegaSources()
   const megaUrl = getMegaFolderUrl()
-  const canChangeSource = sources.length > 1
+  const canChangeSource = hasEnvMegaSources() && sources.length >= 1
   const showSourcePicker =
-    sources.length > 1 && (needsSourceSelection() || pickSource)
+    hasEnvMegaSources() &&
+    sources.length >= 1 &&
+    (pickSource || needsSourceSelection() || !isMegaLibraryEntered()) &&
+    (needsSourceSelection() || megaUrl.length > 0)
+
+  const refreshHomeDownloads = useCallback(() => {
+    void listCachedComicMeta().then((rows) => {
+      setHomeDownloads([...rows].sort((a, b) => b.downloadedAt - a.downloadedAt))
+      setHomeCacheBytes(estimateCacheBytes(rows))
+    })
+  }, [])
+
+  useEffect(() => {
+    if (showSourcePicker) refreshHomeDownloads()
+  }, [showSourcePicker, refreshHomeDownloads])
+
+  useEffect(() => {
+    if (!viewer && showSourcePicker) refreshHomeDownloads()
+  }, [viewer, showSourcePicker, refreshHomeDownloads])
 
   const refresh = useCallback(() => {
     bump((k) => k + 1)
@@ -105,6 +137,7 @@ export default function App() {
         buildProgressFromViewer(session, payload.title, 0, payload.pages.length),
       )
       bumpProgressTick()
+      setMegaLibraryEntered()
       setViewer({
         title: payload.title,
         pages: payload.pages,
@@ -127,6 +160,7 @@ export default function App() {
         return
       }
       lastPageIndexRef.current = loaded.initialPageIndex
+      setMegaLibraryEntered()
       setViewer({
         title: loaded.title,
         pages: loaded.pages,
@@ -187,6 +221,31 @@ export default function App() {
       }`
     : 'none'
 
+  const handleHomeOpenDownload = useCallback(
+    async (meta: CachedComicMeta) => {
+      setHomeToast(null)
+      setHomeOpeningId(meta.id)
+      try {
+        const payload = await loadViewerPagesFromMegaCache(meta)
+        setMegaLibraryEntered()
+        handleOpenComic(payload.title, payload.pages, { megaCacheId: payload.megaCacheId })
+      } catch (e) {
+        setHomeToast(e instanceof Error ? e.message : String(e))
+      } finally {
+        setHomeOpeningId(null)
+      }
+    },
+    [handleOpenComic],
+  )
+
+  const handleRemoveHomeDownload = useCallback(
+    (id: string, displayName: string) => {
+      if (!window.confirm(`¿Quitar «${displayName}» del dispositivo?`)) return
+      void deleteCachedComic(id).then(() => refreshHomeDownloads())
+    },
+    [refreshHomeDownloads],
+  )
+
   const viewerEl =
     viewer ? (
       <ComicViewer
@@ -205,9 +264,23 @@ export default function App() {
     return (
       <>
         <PwaUpdateGate />
+        {homeToast ? (
+          <div className="toast" role="status">
+            {homeToast}
+            <button
+              type="button"
+              className="toast-close"
+              onClick={() => setHomeToast(null)}
+              aria-label="Cerrar aviso"
+            >
+              ×
+            </button>
+          </div>
+        ) : null}
         <SourcePicker
           sources={sources}
           onSelect={() => {
+            setMegaLibraryEntered()
             setPickSource(false)
             refresh()
           }}
@@ -216,6 +289,12 @@ export default function App() {
           onContinueReading={handleContinueReading}
           onForgetReading={handleForgetReading}
           continueReadingBusy={continueBusy}
+          downloadRows={homeDownloads}
+          cacheBytes={homeCacheBytes}
+          onRefreshDownloads={refreshHomeDownloads}
+          onOpenDownload={handleHomeOpenDownload}
+          openingDownloadId={homeOpeningId}
+          onRemoveDownload={handleRemoveHomeDownload}
         />
         {viewerEl}
       </>
@@ -254,7 +333,14 @@ export default function App() {
       <MegaBrowser
         megaFolderUrl={megaUrl}
         onOpenSettings={() => setShowSettings(true)}
-        onChangeSource={canChangeSource ? () => setPickSource(true) : undefined}
+        onChangeSource={
+          canChangeSource
+            ? () => {
+                clearMegaLibraryEntered()
+                setPickSource(true)
+              }
+            : undefined
+        }
         onOpenComic={handleOpenComic}
         onOpenLocalComic={handleOpenLocalComic}
         continueReadingHidden={continueHidden}

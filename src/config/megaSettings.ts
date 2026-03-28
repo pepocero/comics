@@ -11,6 +11,32 @@ export type MegaSource = {
 
 const LS_MANUAL = 'comicread_mega_folder_url'
 const LS_SLOT = 'comicread_mega_source_slot'
+const LS_MEGA_LIBRARY_ENTERED = 'comicread_mega_library_entered'
+
+/** Tras entrar a la biblioteca MEGA (explorador); la página de inicio es el selector de fuente hasta que esto esté activo. */
+export function isMegaLibraryEntered(): boolean {
+  try {
+    return localStorage.getItem(LS_MEGA_LIBRARY_ENTERED) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function setMegaLibraryEntered(): void {
+  try {
+    localStorage.setItem(LS_MEGA_LIBRARY_ENTERED, '1')
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearMegaLibraryEntered(): void {
+  try {
+    localStorage.removeItem(LS_MEGA_LIBRARY_ENTERED)
+  } catch {
+    /* ignore */
+  }
+}
 
 function envUrl(slot: MegaSourceSlot): string {
   if (slot === 0) return (import.meta.env.VITE_MEGA_FOLDER_URL_1 ?? '').trim()

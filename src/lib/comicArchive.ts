@@ -45,10 +45,20 @@ export interface ComicPage {
   blob: Blob
 }
 
+/**
+ * Copia el buffer: algunos entornos (p. ej. buffers devueltos por IndexedDB) pueden fallar con fflate
+ * si se pasa la vista directamente.
+ */
+function uint8CopyOfArrayBuffer(buffer: ArrayBuffer): Uint8Array {
+  const u8 = new Uint8Array(buffer.byteLength)
+  u8.set(new Uint8Array(buffer))
+  return u8
+}
+
 function extractZipPages(buffer: ArrayBuffer): ComicPage[] {
   let unzipped: Record<string, Uint8Array>
   try {
-    unzipped = unzipSync(new Uint8Array(buffer))
+    unzipped = unzipSync(uint8CopyOfArrayBuffer(buffer))
   } catch {
     throw new Error('No se pudo leer el archivo como ZIP (.cbz).')
   }
@@ -129,6 +139,8 @@ async function extractRarPages(
 
 /**
  * Extrae páginas de imagen de un .cbz/.zip (ZIP) o .cbr/.rar (RAR vía libarchive.js).
+ * La firma del archivo tiene prioridad sobre la extensión: es habitual que un .cbr llegue
+ * nombrado como .cbz (o al revés); en producción solo fallaba la ruta ZIP.
  */
 export async function extractComicPages(
   buffer: ArrayBuffer,
@@ -136,17 +148,20 @@ export async function extractComicPages(
 ): Promise<ComicPage[]> {
   const lower = filenameHint.toLowerCase()
 
+  if (isRarMagic(buffer)) {
+    const nameForRar =
+      lower.endsWith('.rar') || lower.endsWith('.cbr') ? filenameHint : 'archivo.cbr'
+    return extractRarPages(buffer, nameForRar)
+  }
+  if (isZipMagic(buffer)) {
+    return extractZipPages(buffer)
+  }
+
   if (lower.endsWith('.cbz') || lower.endsWith('.zip')) {
     return extractZipPages(buffer)
   }
   if (lower.endsWith('.cbr') || lower.endsWith('.rar')) {
     return extractRarPages(buffer, filenameHint)
-  }
-  if (isZipMagic(buffer)) {
-    return extractZipPages(buffer)
-  }
-  if (isRarMagic(buffer)) {
-    return extractRarPages(buffer, 'archivo.rar')
   }
 
   throw new Error(

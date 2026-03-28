@@ -1,10 +1,10 @@
 import { File as MegaFile } from 'megajs'
 import { useCallback, useEffect, useState } from 'react'
 import { parseMegaFolderUrl } from '../lib/parseMegaFolderUrl'
-import { extractComicPages } from '../lib/comicArchive'
 import { toArrayBuffer } from '../lib/bufferToArrayBuffer'
+import { formatBytes } from '../lib/formatBytes'
+import { loadViewerPagesFromMegaCache } from '../lib/megaCachedViewer'
 import {
-  getCachedComic,
   putCachedComic,
   deleteCachedComic,
   clearAllCachedComics,
@@ -45,13 +45,6 @@ function sortEntries(files: MegaFile[]): MegaFile[] {
       sensitivity: 'base',
     })
   })
-}
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`
-  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`
 }
 
 /**
@@ -293,41 +286,16 @@ export function MegaBrowser({
   const openComicFromCache = useCallback(
     async (meta: CachedMeta) => {
       const id = meta.id
-      const name = meta.name
       setOpeningCacheId(id)
       setToast(null)
       try {
-        const cached = await getCachedComic(id)
-        if (!cached?.data) {
-          setToast('El archivo ya no está en el dispositivo.')
-          refreshCacheInfo()
-          return
-        }
-        const byteLen = cached.data.byteLength
-        if (byteLen < 1) {
-          setToast('El archivo en caché está vacío o dañado.')
-          refreshCacheInfo()
-          return
-        }
-        const metaSize = Number(meta.size)
-        if (metaSize > 0 && byteLen !== metaSize) {
-          console.warn('[ComicRead] Metadatos de tamaño distintos al buffer guardado', {
-            metaSize,
-            byteLen,
-            id,
-          })
-        }
-
-        const extracted = await extractComicPages(cached.data, name)
-        const pages = extracted.map((p) => ({
-          name: p.name,
-          url: URL.createObjectURL(p.blob),
-        }))
-        onOpenComic(name, pages, { megaCacheId: id })
+        const payload = await loadViewerPagesFromMegaCache(meta)
+        onOpenComic(payload.title, payload.pages, { megaCacheId: payload.megaCacheId })
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         console.error('[ComicRead] Error al abrir desde caché', err)
         setToast(msg || 'Error al abrir el cómic.')
+        refreshCacheInfo()
       } finally {
         setOpeningCacheId(null)
       }

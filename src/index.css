@@ -646,6 +646,38 @@ button:disabled {
   margin: 0.25rem 0 0.85rem;
 }
 
+.source-picker-downloads-wrap {
+  margin: 0 0 1.25rem;
+}
+
+.source-picker-downloads-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.source-picker-downloads-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.cache-badge--inline {
+  margin-right: 0;
+}
+
+.source-picker-refresh {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.65rem;
+}
+
+.downloads-panel--home {
+  margin-top: 0;
+}
+
 .continue-reading {
   margin-bottom: 1.25rem;
   padding: 0.85rem 1rem;
