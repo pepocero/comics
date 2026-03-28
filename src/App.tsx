@@ -80,13 +80,14 @@ export default function App() {
   )
 
   const handleOpenComic = useCallback(
-    async (title: string, pages: ViewerPage[], ctx: { megaCacheId: string }) => {
-      await removePreviousLocalBlobIfAny(getReadingProgress())
+    (title: string, pages: ViewerPage[], ctx: { megaCacheId: string }) => {
+      const prevProgress = getReadingProgress()
       const session: ViewerSession = { kind: 'mega', cacheId: ctx.megaCacheId }
       lastPageIndexRef.current = 0
       saveReadingProgress(buildProgressFromViewer(session, title, 0, pages.length))
       bumpProgressTick()
       setViewer({ title, pages, initialPageIndex: 0, session })
+      void removePreviousLocalBlobIfAny(prevProgress).catch(() => {})
     },
     [bumpProgressTick],
   )
