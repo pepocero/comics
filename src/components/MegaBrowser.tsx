@@ -303,10 +303,21 @@ export function MegaBrowser({
           refreshCacheInfo()
           return
         }
-        if (cached.data.byteLength !== meta.size) {
-          setToast('El archivo en caché está incompleto. Descárgalo de nuevo.')
+        const byteLen = cached.data.byteLength
+        if (byteLen < 1) {
+          setToast('El archivo en caché está vacío o dañado.')
+          refreshCacheInfo()
           return
         }
+        const metaSize = Number(meta.size)
+        if (metaSize > 0 && byteLen !== metaSize) {
+          console.warn('[ComicRead] Metadatos de tamaño distintos al buffer guardado', {
+            metaSize,
+            byteLen,
+            id,
+          })
+        }
+
         const extracted = await extractComicPages(cached.data, name)
         const pages = extracted.map((p) => ({
           name: p.name,
@@ -315,6 +326,7 @@ export function MegaBrowser({
         onOpenComic(name, pages, { megaCacheId: id })
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
+        console.error('[ComicRead] Error al abrir desde caché', err)
         setToast(msg || 'Error al abrir el cómic.')
       } finally {
         setOpeningCacheId(null)
