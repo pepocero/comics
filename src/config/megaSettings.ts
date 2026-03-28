@@ -1,5 +1,5 @@
-/** Slot 0, 1 o 2 → corresponde a VITE_MEGA_FOLDER_URL_1 … _3 */
-export type MegaSourceSlot = 0 | 1 | 2
+/** Slot 0…3 → VITE_MEGA_FOLDER_URL_1 … _4 */
+export type MegaSourceSlot = 0 | 1 | 2 | 3
 
 export type MegaSource = {
   slot: MegaSourceSlot
@@ -15,22 +15,24 @@ const LS_SLOT = 'comicread_mega_source_slot'
 function envUrl(slot: MegaSourceSlot): string {
   if (slot === 0) return (import.meta.env.VITE_MEGA_FOLDER_URL_1 ?? '').trim()
   if (slot === 1) return (import.meta.env.VITE_MEGA_FOLDER_URL_2 ?? '').trim()
-  return (import.meta.env.VITE_MEGA_FOLDER_URL_3 ?? '').trim()
+  if (slot === 2) return (import.meta.env.VITE_MEGA_FOLDER_URL_3 ?? '').trim()
+  return (import.meta.env.VITE_MEGA_FOLDER_URL_4 ?? '').trim()
 }
 
 function envLabel(slot: MegaSourceSlot): string {
   if (slot === 0) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_1 ?? '').trim()
   if (slot === 1) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_2 ?? '').trim()
-  return (import.meta.env.VITE_MEGA_SOURCE_LABEL_3 ?? '').trim()
+  if (slot === 2) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_3 ?? '').trim()
+  return (import.meta.env.VITE_MEGA_SOURCE_LABEL_4 ?? '').trim()
 }
 
 /**
- * Fuentes definidas en build (Vite): hasta 3 enlaces MEGA.
+ * Fuentes definidas en build (Vite): hasta 4 enlaces MEGA.
  * Si no hay ninguno, se puede usar solo URL manual en localStorage.
  */
 export function getConfiguredMegaSources(): MegaSource[] {
   const out: MegaSource[] = []
-  for (let s = 0; s < 3; s++) {
+  for (let s = 0; s < 4; s++) {
     const slot = s as MegaSourceSlot
     const url = envUrl(slot)
     if (!url) continue
@@ -50,7 +52,7 @@ export function getStoredSourceSlot(): MegaSourceSlot | null {
   const raw = localStorage.getItem(LS_SLOT)
   if (raw === null) return null
   const n = parseInt(raw, 10)
-  if (n === 0 || n === 1 || n === 2) return n as MegaSourceSlot
+  if (n === 0 || n === 1 || n === 2 || n === 3) return n as MegaSourceSlot
   return null
 }
 

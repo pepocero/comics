@@ -111,6 +111,16 @@ export async function clearAllCachedComics(): Promise<void> {
   })
 }
 
+/** Comprueba que el registro guardado coincide con el tamaño esperado (descarga íntegra). */
+export async function verifyCachedComicBytes(
+  id: string,
+  expectedByteLength: number,
+): Promise<boolean> {
+  const row = await getCachedComic(id)
+  if (!row?.data) return false
+  return row.data.byteLength === expectedByteLength
+}
+
 export async function listCachedComicMeta(): Promise<
   Omit<CachedComicRecord, 'data'>[]
 > {
