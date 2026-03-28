@@ -50,7 +50,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,ico,svg,woff2,wasm}'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/(mega\.nz|g\.mega\.co\.nz)\/.*/i,
