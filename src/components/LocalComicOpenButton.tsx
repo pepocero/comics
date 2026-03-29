@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { extractComicPages } from '../lib/comicArchive'
+import { prepareViewerPagesFromArchive } from '../lib/extractComicForViewer'
 import type { ViewerPage } from './ComicViewer'
 
 function isAllowedComicFile(name: string): boolean {
@@ -43,15 +43,11 @@ export function LocalComicOpenButton({ onOpen, disabled, variant }: Props) {
     setBusy(true)
     try {
       const buffer = await file.arrayBuffer()
-      const extracted = await extractComicPages(buffer, file.name)
-      if (extracted.length === 0) {
+      const pages = await prepareViewerPagesFromArchive(buffer, file.name)
+      if (pages.length === 0) {
         setError('No se encontraron imágenes en el archivo.')
         return
       }
-      const pages: ViewerPage[] = extracted.map((p) => ({
-        name: p.name,
-        url: URL.createObjectURL(p.blob),
-      }))
       const title = file.name.replace(/\.[^.]+$/, '') || file.name
       onOpen({
         title,

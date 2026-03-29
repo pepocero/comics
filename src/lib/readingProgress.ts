@@ -1,4 +1,4 @@
-import { extractComicPages } from './comicArchive'
+import { prepareViewerPagesFromArchive } from './extractComicForViewer'
 import {
   deleteLocalReadingBlob,
   getCachedComic,
@@ -7,7 +7,8 @@ import {
 } from './comicStorage'
 import type { ViewerPage } from '../components/ComicViewer'
 
-const LS_KEY = 'comicread-last-reading-v1'
+const LS_KEY_LEGACY = 'comicread-last-reading-v1'
+const LS_KEY_LIST = 'comicread-reading-list-v1'
 
 export type ViewerSession =
   | { kind: 'mega'; cacheId: string }
@@ -72,28 +73,116 @@ function parseStored(json: string | null): ReadingProgress | null {
   }
 }
 
-export function getReadingProgress(): ReadingProgress | null {
+function parseProgressUnknown(item: unknown): ReadingProgress | null {
+  if (!item || typeof item !== 'object') return null
+  return parseStored(JSON.stringify(item))
+}
+
+function parseList(json: string | null): ReadingProgress[] {
+  if (!json) return []
   try {
-    return parseStored(localStorage.getItem(LS_KEY))
+    const v = JSON.parse(json) as unknown
+    if (!Array.isArray(v)) return []
+    const out: ReadingProgress[] = []
+    for (const item of v) {
+      const p = parseProgressUnknown(item)
+      if (p) out.push(p)
+    }
+    return out
   } catch {
-    return null
+    return []
   }
 }
 
-export function saveReadingProgress(p: ReadingProgress): void {
+function migrateLegacyIfNeeded(): void {
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify(p))
+    const legacy = localStorage.getItem(LS_KEY_LEGACY)
+    if (!legacy) return
+    const p = parseStored(legacy)
+    if (p) {
+      const cur = localStorage.getItem(LS_KEY_LIST)
+      if (!cur || cur === '[]') {
+        localStorage.setItem(LS_KEY_LIST, JSON.stringify([p]))
+      }
+    }
+    localStorage.removeItem(LS_KEY_LEGACY)
+  } catch {
+    /* ignore */
+  }
+}
+
+function progressKey(p: ReadingProgress): string {
+  if (p.source === 'mega') return `mega:${p.megaCacheId}`
+  return `local:${p.localBlobId}`
+}
+
+/** Clave estable para listas React y estado de carga. */
+export function readingProgressKey(p: ReadingProgress): string {
+  return progressKey(p)
+}
+
+function persistList(list: ReadingProgress[]): void {
+  try {
+    localStorage.setItem(LS_KEY_LIST, JSON.stringify(list))
   } catch {
     /* ignore quota / private mode */
   }
 }
 
-export function clearReadingProgress(): void {
+/** Todas las lecturas en curso, más recientes primero. */
+export function getReadingList(): ReadingProgress[] {
+  migrateLegacyIfNeeded()
+  const list = parseList(localStorage.getItem(LS_KEY_LIST))
+  return [...list].sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+export function findReadingBySession(session: ViewerSession): ReadingProgress | null {
+  const list = getReadingList()
+  const key =
+    session.kind === 'mega' ? `mega:${session.cacheId}` : `local:${session.blobId}`
+  return list.find((p) => progressKey(p) === key) ?? null
+}
+
+export function upsertReadingProgress(p: ReadingProgress): void {
+  migrateLegacyIfNeeded()
+  const list = parseList(localStorage.getItem(LS_KEY_LIST))
+  const k = progressKey(p)
+  const idx = list.findIndex((x) => progressKey(x) === k)
+  if (idx >= 0) list[idx] = p
+  else list.push(p)
+  persistList(list)
+}
+
+export function removeReadingProgress(p: ReadingProgress): void {
+  migrateLegacyIfNeeded()
+  const list = parseList(localStorage.getItem(LS_KEY_LIST))
+  const k = progressKey(p)
+  persistList(list.filter((x) => progressKey(x) !== k))
+}
+
+export function clearAllReadingProgress(): void {
   try {
-    localStorage.removeItem(LS_KEY)
+    localStorage.removeItem(LS_KEY_LIST)
+    localStorage.removeItem(LS_KEY_LEGACY)
   } catch {
     /* ignore */
   }
+}
+
+/** @deprecated Usar getReadingList; se mantiene por compatibilidad con código legado */
+export function getReadingProgress(): ReadingProgress | null {
+  const list = getReadingList()
+  return list[0] ?? null
+}
+
+/** @deprecated Usar upsertReadingProgress */
+export function saveReadingProgress(p: ReadingProgress): void {
+  upsertReadingProgress(p)
+}
+
+/** @deprecated Usar removeReadingProgress o clearAllReadingProgress */
+export function clearReadingProgress(): void {
+  clearAllReadingProgress()
 }
 
 /** Guarda el archivo local en IndexedDB para poder reanudar sin volver a elegir el archivo. */
@@ -105,6 +194,7 @@ export async function persistLocalArchiveForReading(
   await putLocalReadingBlob({ id: blobId, fileName, data })
 }
 
+/** Solo para olvidar una entrada local concreta. */
 export async function removePreviousLocalBlobIfAny(p: ReadingProgress | null): Promise<void> {
   if (p?.source === 'local') {
     await deleteLocalReadingBlob(p.localBlobId).catch(() => {})
@@ -117,12 +207,8 @@ export async function loadViewerFromProgress(
   if (p.source === 'mega') {
     const cached = await getCachedComic(p.megaCacheId)
     if (!cached?.data) return null
-    const extracted = await extractComicPages(cached.data, cached.name)
-    if (extracted.length === 0) return null
-    const pages: ViewerPage[] = extracted.map((x) => ({
-      name: x.name,
-      url: URL.createObjectURL(x.blob),
-    }))
+    const pages = await prepareViewerPagesFromArchive(cached.data, cached.name)
+    if (pages.length === 0) return null
     const totalPages = pages.length
     const pageIndex = Math.max(0, Math.min(p.pageIndex, totalPages - 1))
     return {
@@ -135,12 +221,8 @@ export async function loadViewerFromProgress(
 
   const row = await getLocalReadingBlob(p.localBlobId)
   if (!row?.data) return null
-  const extracted = await extractComicPages(row.data, row.fileName)
-  if (extracted.length === 0) return null
-  const pages: ViewerPage[] = extracted.map((x) => ({
-    name: x.name,
-    url: URL.createObjectURL(x.blob),
-  }))
+  const pages = await prepareViewerPagesFromArchive(row.data, row.fileName)
+  if (pages.length === 0) return null
   const totalPages = pages.length
   const pageIndex = Math.max(0, Math.min(p.pageIndex, totalPages - 1))
   return {

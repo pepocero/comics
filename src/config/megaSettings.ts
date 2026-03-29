@@ -10,6 +10,8 @@ export type MegaSource = {
 }
 
 const LS_MANUAL = 'comicread_mega_folder_url'
+/** Si está activo y hay texto en LS_MANUAL, esa URL tiene prioridad sobre las fuentes Vite (enlace pegado en Fuentes). */
+const LS_USE_MANUAL = 'comicread_mega_use_manual'
 const LS_SLOT = 'comicread_mega_source_slot'
 const LS_MEGA_LIBRARY_ENTERED = 'comicread_mega_library_entered'
 
@@ -91,15 +93,48 @@ export function clearStoredSourceSlot(): void {
 }
 
 export function setMegaFolderUrl(url: string): void {
-  if (!url.trim()) {
-    localStorage.removeItem(LS_MANUAL)
-    return
+  try {
+    if (!url.trim()) {
+      localStorage.removeItem(LS_MANUAL)
+      localStorage.removeItem(LS_USE_MANUAL)
+      return
+    }
+    localStorage.setItem(LS_MANUAL, url.trim())
+  } catch {
+    /* ignore */
   }
-  localStorage.setItem(LS_MANUAL, url.trim())
+}
+
+export function setUseManualMegaUrl(active: boolean): void {
+  try {
+    if (active) {
+      localStorage.setItem(LS_USE_MANUAL, '1')
+    } else {
+      localStorage.removeItem(LS_USE_MANUAL)
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isUsingManualMegaUrl(): boolean {
+  try {
+    return localStorage.getItem(LS_USE_MANUAL) === '1'
+  } catch {
+    return false
+  }
 }
 
 /** URL activa: fuentes env (una o varias) o enlace manual si no hay env. */
 export function getMegaFolderUrl(): string {
+  try {
+    const manual = (localStorage.getItem(LS_MANUAL) ?? '').trim()
+    if (localStorage.getItem(LS_USE_MANUAL) === '1' && manual.length > 0) {
+      return manual
+    }
+  } catch {
+    /* ignore */
+  }
   const sources = getConfiguredMegaSources()
   if (sources.length === 0) {
     return (localStorage.getItem(LS_MANUAL) ?? '').trim()
@@ -115,6 +150,7 @@ export function getMegaFolderUrl(): string {
 
 /** Hay varias cuentas en env y aún no se eligió una (o el slot guardado ya no existe). */
 export function needsSourceSelection(): boolean {
+  if (isUsingManualMegaUrl()) return false
   const sources = getConfiguredMegaSources()
   if (sources.length <= 1) return false
   const slot = getStoredSourceSlot()

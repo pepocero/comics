@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   clearMegaLibraryEntered,
   getConfiguredMegaSources,
   getMegaFolderUrl,
   hasEnvMegaSources,
-  isMegaLibraryEntered,
   needsSourceSelection,
   setMegaLibraryEntered,
 } from './config/megaSettings'
+import { AppShell, type ShellNavId } from './components/AppShell'
+import { ContinueReadingPage } from './components/ContinueReadingPage'
+import { DownloadsSection } from './components/DownloadsSection'
+import { HomePage } from './components/HomePage'
 import { SettingsPanel } from './components/SettingsPanel'
 import { SourcePicker } from './components/SourcePicker'
 import { MegaBrowser } from './components/MegaBrowser'
@@ -16,21 +19,23 @@ import type { LocalComicOpenPayload } from './components/LocalComicOpenButton'
 import { PwaUpdateGate } from './components/PwaUpdateGate'
 import type { ViewerSession } from './lib/readingProgress'
 import {
+  buildProgressFromViewer,
+  getReadingList,
+  loadViewerFromProgress,
+  readingProgressKey,
+  removePreviousLocalBlobIfAny,
+  persistLocalArchiveForReading,
+  removeReadingProgress,
+  upsertReadingProgress,
+} from './lib/readingProgress'
+import type { ReadingProgress } from './lib/readingProgress'
+import {
   deleteCachedComic,
   estimateCacheBytes,
   listCachedComicMeta,
 } from './lib/comicStorage'
 import type { CachedComicMeta } from './lib/megaCachedViewer'
 import { loadViewerPagesFromMegaCache } from './lib/megaCachedViewer'
-import {
-  buildProgressFromViewer,
-  clearReadingProgress,
-  getReadingProgress,
-  loadViewerFromProgress,
-  persistLocalArchiveForReading,
-  removePreviousLocalBlobIfAny,
-  saveReadingProgress,
-} from './lib/readingProgress'
 import './index.css'
 
 type ViewerState = {
@@ -42,11 +47,11 @@ type ViewerState = {
 
 export default function App() {
   const [, bump] = useState(0)
-  const [, bumpProgress] = useState(0)
-  const [pickSource, setPickSource] = useState(false)
+  const [progressTick, bumpProgressTick] = useState(0)
+  const [section, setSection] = useState<ShellNavId>('home')
   const [showSettings, setShowSettings] = useState(false)
   const [viewer, setViewer] = useState<ViewerState | null>(null)
-  const [continueBusy, setContinueBusy] = useState(false)
+  const [continueBusyKey, setContinueBusyKey] = useState<string | null>(null)
   const [homeDownloads, setHomeDownloads] = useState<CachedComicMeta[]>([])
   const [homeCacheBytes, setHomeCacheBytes] = useState(0)
   const [homeOpeningId, setHomeOpeningId] = useState<string | null>(null)
@@ -63,11 +68,7 @@ export default function App() {
   const sources = getConfiguredMegaSources()
   const megaUrl = getMegaFolderUrl()
   const canChangeSource = hasEnvMegaSources() && sources.length >= 1
-  const showSourcePicker =
-    hasEnvMegaSources() &&
-    sources.length >= 1 &&
-    (pickSource || needsSourceSelection() || !isMegaLibraryEntered()) &&
-    (needsSourceSelection() || megaUrl.length > 0)
+  const libraryReady = megaUrl.length > 0 && !needsSourceSelection()
 
   const refreshHomeDownloads = useCallback(() => {
     void listCachedComicMeta().then((rows) => {
@@ -77,19 +78,19 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (showSourcePicker) refreshHomeDownloads()
-  }, [showSourcePicker, refreshHomeDownloads])
+    refreshHomeDownloads()
+  }, [refreshHomeDownloads])
 
   useEffect(() => {
-    if (!viewer && showSourcePicker) refreshHomeDownloads()
-  }, [viewer, showSourcePicker, refreshHomeDownloads])
+    if (section === 'downloads') refreshHomeDownloads()
+  }, [section, refreshHomeDownloads])
 
   const refresh = useCallback(() => {
     bump((k) => k + 1)
   }, [])
 
-  const bumpProgressTick = useCallback(() => {
-    bumpProgress((k) => k + 1)
+  const bumpProgressTickFn = useCallback(() => {
+    bumpProgressTick((k) => k + 1)
   }, [])
 
   const handlePageIndexChange = useCallback(
@@ -102,41 +103,38 @@ export default function App() {
       }
       progressSaveTimerRef.current = window.setTimeout(() => {
         progressSaveTimerRef.current = null
-        saveReadingProgress(
+        upsertReadingProgress(
           buildProgressFromViewer(v.session, v.title, pageIndex, v.pages.length),
         )
-        bumpProgressTick()
+        bumpProgressTickFn()
       }, 400)
     },
-    [bumpProgressTick],
+    [bumpProgressTickFn],
   )
 
   const handleOpenComic = useCallback(
     (title: string, pages: ViewerPage[], ctx: { megaCacheId: string }) => {
-      const prevProgress = getReadingProgress()
-      const session: ViewerSession = { kind: 'mega', cacheId: ctx.megaCacheId }
       lastPageIndexRef.current = 0
-      saveReadingProgress(buildProgressFromViewer(session, title, 0, pages.length))
-      bumpProgressTick()
+      const session: ViewerSession = { kind: 'mega', cacheId: ctx.megaCacheId }
+      upsertReadingProgress(buildProgressFromViewer(session, title, 0, pages.length))
+      bumpProgressTickFn()
       setViewer({ title, pages, initialPageIndex: 0, session })
-      void removePreviousLocalBlobIfAny(prevProgress).catch(() => {})
     },
-    [bumpProgressTick],
+    [bumpProgressTickFn],
   )
 
   const handleOpenLocalComic = useCallback(
     async (payload: LocalComicOpenPayload) => {
-      setPickSource(false)
+      setSection('library')
       refresh()
-      await removePreviousLocalBlobIfAny(getReadingProgress())
       const blobId = crypto.randomUUID()
       await persistLocalArchiveForReading(blobId, payload.archiveFileName, payload.archiveBuffer)
       const session: ViewerSession = { kind: 'local', blobId }
       lastPageIndexRef.current = 0
-      saveReadingProgress(
+      upsertReadingProgress(
         buildProgressFromViewer(session, payload.title, 0, payload.pages.length),
       )
-      bumpProgressTick()
+      bumpProgressTickFn()
       setMegaLibraryEntered()
       setViewer({
         title: payload.title,
@@ -145,48 +143,53 @@ export default function App() {
         session,
       })
     },
-    [bumpProgressTick, refresh],
+    [bumpProgressTickFn, refresh],
   )
 
-  const handleContinueReading = useCallback(async () => {
-    const p = getReadingProgress()
-    if (!p) return
-    setContinueBusy(true)
-    try {
-      const loaded = await loadViewerFromProgress(p)
-      if (!loaded) {
-        clearReadingProgress()
-        bumpProgressTick()
-        return
+  const handleContinueReading = useCallback(
+    async (p: ReadingProgress) => {
+      const k = readingProgressKey(p)
+      setContinueBusyKey(k)
+      try {
+        const loaded = await loadViewerFromProgress(p)
+        if (!loaded) {
+          removeReadingProgress(p)
+          await removePreviousLocalBlobIfAny(p)
+          bumpProgressTickFn()
+          return
+        }
+        lastPageIndexRef.current = loaded.initialPageIndex
+        setMegaLibraryEntered()
+        setViewer({
+          title: loaded.title,
+          pages: loaded.pages,
+          initialPageIndex: loaded.initialPageIndex,
+          session: loaded.session,
+        })
+        upsertReadingProgress(
+          buildProgressFromViewer(
+            loaded.session,
+            loaded.title,
+            loaded.initialPageIndex,
+            loaded.pages.length,
+          ),
+        )
+        bumpProgressTickFn()
+      } finally {
+        setContinueBusyKey(null)
       }
-      lastPageIndexRef.current = loaded.initialPageIndex
-      setMegaLibraryEntered()
-      setViewer({
-        title: loaded.title,
-        pages: loaded.pages,
-        initialPageIndex: loaded.initialPageIndex,
-        session: loaded.session,
-      })
-      saveReadingProgress(
-        buildProgressFromViewer(
-          loaded.session,
-          loaded.title,
-          loaded.initialPageIndex,
-          loaded.pages.length,
-        ),
-      )
-      bumpProgressTick()
-    } finally {
-      setContinueBusy(false)
-    }
-  }, [bumpProgressTick])
+    },
+    [bumpProgressTickFn],
+  )
 
-  const handleForgetReading = useCallback(async () => {
-    const p = getReadingProgress()
-    await removePreviousLocalBlobIfAny(p)
-    clearReadingProgress()
-    bumpProgressTick()
-  }, [bumpProgressTick])
+  const handleForgetReading = useCallback(
+    async (p: ReadingProgress) => {
+      await removePreviousLocalBlobIfAny(p)
+      removeReadingProgress(p)
+      bumpProgressTickFn()
+    },
+    [bumpProgressTickFn],
+  )
 
   const closeViewer = useCallback(() => {
     if (progressSaveTimerRef.current !== null) {
@@ -195,7 +198,7 @@ export default function App() {
     }
     const v = viewerRef.current
     if (v) {
-      saveReadingProgress(
+      upsertReadingProgress(
         buildProgressFromViewer(
           v.session,
           v.title,
@@ -203,7 +206,7 @@ export default function App() {
           v.pages.length,
         ),
       )
-      bumpProgressTick()
+      bumpProgressTickFn()
     }
     setViewer((prev) => {
       if (prev) {
@@ -213,7 +216,7 @@ export default function App() {
       }
       return null
     })
-  }, [bumpProgressTick])
+  }, [bumpProgressTickFn])
 
   const viewerKey = viewer
     ? `${viewer.session.kind}-${
@@ -259,49 +262,14 @@ export default function App() {
     ) : null
 
   const continueHidden = !!viewer
+  const readingItems = useMemo(() => getReadingList(), [progressTick])
 
-  if (showSourcePicker) {
-    return (
-      <>
-        <PwaUpdateGate />
-        {homeToast ? (
-          <div className="toast" role="status">
-            {homeToast}
-            <button
-              type="button"
-              className="toast-close"
-              onClick={() => setHomeToast(null)}
-              aria-label="Cerrar aviso"
-            >
-              ×
-            </button>
-          </div>
-        ) : null}
-        <SourcePicker
-          sources={sources}
-          onSelect={() => {
-            setMegaLibraryEntered()
-            setPickSource(false)
-            refresh()
-          }}
-          onOpenLocalComic={handleOpenLocalComic}
-          continueReadingHidden={continueHidden}
-          onContinueReading={handleContinueReading}
-          onForgetReading={handleForgetReading}
-          continueReadingBusy={continueBusy}
-          downloadRows={homeDownloads}
-          cacheBytes={homeCacheBytes}
-          onRefreshDownloads={refreshHomeDownloads}
-          onOpenDownload={handleHomeOpenDownload}
-          openingDownloadId={homeOpeningId}
-          onRemoveDownload={handleRemoveHomeDownload}
-        />
-        {viewerEl}
-      </>
-    )
-  }
+  const handleNavigate = useCallback((id: ShellNavId) => {
+    setSection(id)
+  }, [])
 
   const needsManualSetup = !hasEnvMegaSources() && !megaUrl
+
   if (needsManualSetup) {
     return (
       <>
@@ -327,27 +295,109 @@ export default function App() {
     )
   }
 
+  const shellContent = (() => {
+    switch (section) {
+      case 'home':
+        return (
+          <HomePage
+            onGoSources={() => setSection('sources')}
+            onGoLibrary={() => setSection('library')}
+            libraryReady={libraryReady}
+          />
+        )
+      case 'sources':
+        return (
+          <SourcePicker
+            sources={sources}
+            onSelect={() => {
+              setMegaLibraryEntered()
+              setSection('library')
+              refresh()
+            }}
+            onOpenLocalComic={handleOpenLocalComic}
+          />
+        )
+      case 'library':
+        if (!libraryReady) {
+          return (
+            <div className="panel library-gate">
+              <h1 className="library-gate-title">Biblioteca MEGA</h1>
+              <p className="lead">
+                Para explorar tu carpeta en la nube, primero elige una fuente en la sección{' '}
+                <strong>Fuentes</strong>.
+              </p>
+              <button type="button" className="home-cta" onClick={() => setSection('sources')}>
+                Ir a Fuentes
+              </button>
+            </div>
+          )
+        }
+        return (
+          <MegaBrowser
+            megaFolderUrl={megaUrl}
+            onOpenSettings={() => setShowSettings(true)}
+            onChangeSource={
+              canChangeSource
+                ? () => {
+                    clearMegaLibraryEntered()
+                    setSection('sources')
+                  }
+                : undefined
+            }
+            onOpenComic={handleOpenComic}
+            onOpenLocalComic={handleOpenLocalComic}
+          />
+        )
+      case 'downloads':
+        return (
+          <DownloadsSection
+            rows={homeDownloads}
+            cacheBytes={homeCacheBytes}
+            onRefresh={refreshHomeDownloads}
+            onOpen={handleHomeOpenDownload}
+            openingId={homeOpeningId}
+            onRemove={handleRemoveHomeDownload}
+          />
+        )
+      case 'continue':
+        return (
+          <ContinueReadingPage
+            items={readingItems}
+            busyId={continueBusyKey}
+            onContinue={handleContinueReading}
+            onForget={handleForgetReading}
+          />
+        )
+      default:
+        return null
+    }
+  })()
+
   return (
     <>
       <PwaUpdateGate />
-      <MegaBrowser
-        megaFolderUrl={megaUrl}
+      {homeToast ? (
+        <div className="toast toast--global" role="status">
+          {homeToast}
+          <button
+            type="button"
+            className="toast-close"
+            onClick={() => setHomeToast(null)}
+            aria-label="Cerrar aviso"
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
+      <AppShell
+        active={section}
+        onNavigate={handleNavigate}
+        libraryDisabled={!libraryReady}
         onOpenSettings={() => setShowSettings(true)}
-        onChangeSource={
-          canChangeSource
-            ? () => {
-                clearMegaLibraryEntered()
-                setPickSource(true)
-              }
-            : undefined
-        }
-        onOpenComic={handleOpenComic}
-        onOpenLocalComic={handleOpenLocalComic}
-        continueReadingHidden={continueHidden}
-        onContinueReading={handleContinueReading}
-        onForgetReading={handleForgetReading}
-        continueReadingBusy={continueBusy}
-      />
+        navHidden={continueHidden}
+      >
+        {shellContent}
+      </AppShell>
       {viewerEl}
     </>
   )

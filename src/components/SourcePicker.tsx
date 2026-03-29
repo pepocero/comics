@@ -1,55 +1,43 @@
+import { useState, type FormEvent } from 'react'
 import type { MegaSource } from '../config/megaSettings'
-import { setStoredSourceSlot } from '../config/megaSettings'
-import { formatBytes } from '../lib/formatBytes'
-import type { CachedComicMeta } from '../lib/megaCachedViewer'
-import { ContinueReadingSection } from './ContinueReadingSection'
+import {
+  setMegaFolderUrl,
+  setStoredSourceSlot,
+  setUseManualMegaUrl,
+} from '../config/megaSettings'
+import { parseMegaFolderUrl } from '../lib/parseMegaFolderUrl'
 import { LocalComicOpenButton, type LocalComicOpenPayload } from './LocalComicOpenButton'
 
 type Props = {
   sources: MegaSource[]
   onSelect: () => void
   onOpenLocalComic: (payload: LocalComicOpenPayload) => void
-  continueReadingHidden?: boolean
-  onContinueReading: () => void | Promise<void>
-  onForgetReading: () => void
-  continueReadingBusy?: boolean
-  /** Descargas en caché (misma lista que en el explorador MEGA) */
-  downloadRows: CachedComicMeta[]
-  cacheBytes: number
-  onRefreshDownloads: () => void
-  onOpenDownload: (meta: CachedComicMeta) => void | Promise<void>
-  openingDownloadId: string | null
-  onRemoveDownload: (id: string, displayName: string) => void
 }
 
-export function SourcePicker({
-  sources,
-  onSelect,
-  onOpenLocalComic,
-  continueReadingHidden,
-  onContinueReading,
-  onForgetReading,
-  continueReadingBusy,
-  downloadRows,
-  cacheBytes,
-  onRefreshDownloads,
-  onOpenDownload,
-  openingDownloadId,
-  onRemoveDownload,
-}: Props) {
+export function SourcePicker({ sources, onSelect, onOpenLocalComic }: Props) {
+  const [pastedUrl, setPastedUrl] = useState('')
+  const [pasteError, setPasteError] = useState<string | null>(null)
+
+  function handlePastedSubmit(e: FormEvent): void {
+    e.preventDefault()
+    const parsed = parseMegaFolderUrl(pastedUrl)
+    if (!parsed.ok) {
+      setPasteError(parsed.error)
+      return
+    }
+    setPasteError(null)
+    setMegaFolderUrl(parsed.url)
+    setUseManualMegaUrl(true)
+    onSelect()
+  }
+
   return (
     <section className="panel source-picker">
-      <h1>ComicRead</h1>
+      <h1 className="source-picker-title">Fuentes de lectura</h1>
       <p className="lead">
-        Página de inicio: elige la cuenta de MEGA, abre cómics ya descargados en este dispositivo, o un
-        archivo local.
+        Elige la cuenta de MEGA enlazada en la configuración de la app. Cada fuente apunta a una carpeta
+        raíz en la nube; luego podrás explorarla en <strong>Biblioteca MEGA</strong>.
       </p>
-      <ContinueReadingSection
-        hidden={continueReadingHidden}
-        onContinue={onContinueReading}
-        onForget={onForgetReading}
-        busy={continueReadingBusy}
-      />
       <ul className="source-list">
         {sources.map((s) => (
           <li key={s.slot}>
@@ -57,6 +45,7 @@ export function SourcePicker({
               type="button"
               className="source-card"
               onClick={() => {
+                setUseManualMegaUrl(false)
                 setStoredSourceSlot(s.slot)
                 onSelect()
               }}
@@ -70,74 +59,42 @@ export function SourcePicker({
         ))}
       </ul>
 
-      <div className="source-picker-downloads-wrap">
-        <div className="source-picker-downloads-head">
-          <h2 className="source-picker-downloads-title">Descargas</h2>
-          <span className="cache-badge cache-badge--inline" title="Espacio usado en caché">
-            Caché: {formatBytes(cacheBytes)}
-          </span>
-          <button type="button" className="btn-secondary source-picker-refresh" onClick={onRefreshDownloads}>
-            Actualizar
-          </button>
-        </div>
-        <div className="downloads-panel downloads-panel--home">
-          <p className="downloads-panel-hint muted">
-            Archivos guardados desde MEGA. Puedes abrirlos aquí sin entrar al explorador.
-          </p>
-          {downloadRows.length === 0 ? (
-            <p className="muted downloads-empty">
-              No hay descargas todavía. Elige una cuenta arriba y descarga cómics desde el explorador; luego
-              volverán a aparecer aquí.
-            </p>
-          ) : (
-            <ul className="downloads-list">
-              {downloadRows.map((row) => {
-                const busy = openingDownloadId === row.id
-                const title = row.name.replace(/\.[^.]+$/, '') || row.name
-                return (
-                  <li key={row.id} className="downloads-row">
-                    <div className="downloads-row-info">
-                      <span className="downloads-row-name" title={row.name}>
-                        {title}
-                      </span>
-                      <span className="downloads-row-meta">
-                        {formatBytes(row.size)} ·{' '}
-                        {new Date(row.downloadedAt).toLocaleString('es', {
-                          dateStyle: 'short',
-                          timeStyle: 'short',
-                        })}
-                      </span>
-                    </div>
-                    <div className="downloads-row-actions">
-                      <button
-                        type="button"
-                        className="downloads-open-btn"
-                        onClick={() => void onOpenDownload(row)}
-                        disabled={!!openingDownloadId}
-                      >
-                        {busy ? 'Abriendo…' : 'Abrir'}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-secondary downloads-remove-btn"
-                        onClick={() => onRemoveDownload(row.id, row.name)}
-                        disabled={!!openingDownloadId}
-                      >
-                        Quitar
-                      </button>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
-      </div>
-
       <p className="source-picker-divider" role="presentation">
         o
       </p>
       <LocalComicOpenButton variant="panel" onOpen={onOpenLocalComic} />
+
+      <p className="source-picker-divider" role="presentation">
+        o
+      </p>
+
+      <form className="source-picker-paste" onSubmit={handlePastedSubmit}>
+        <h2 className="source-picker-paste-title">Enlace de carpeta MEGA</h2>
+        <p className="source-picker-paste-lead muted">
+          Pega aquí el enlace completo de una carpeta (incluye la parte después de <code>#</code>). Se
+          abrirá en la biblioteca con prioridad sobre las cuentas de arriba hasta que elijas otra fuente.
+        </p>
+        <label className="source-picker-paste-label" htmlFor="source-paste-mega-url">
+          URL de la carpeta
+        </label>
+        <textarea
+          id="source-paste-mega-url"
+          className="mega-url-input"
+          value={pastedUrl}
+          onChange={(e) => {
+            setPastedUrl(e.target.value)
+            setPasteError(null)
+          }}
+          placeholder="https://mega.nz/folder/…#…"
+          rows={3}
+          autoComplete="off"
+          spellCheck={false}
+        />
+        {pasteError ? <p className="error-msg">{pasteError}</p> : null}
+        <div className="btn-row">
+          <button type="submit">Abrir esta carpeta</button>
+        </div>
+      </form>
     </section>
   )
 }

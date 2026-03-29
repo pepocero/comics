@@ -1,6 +1,6 @@
-import { extractComicPages } from './comicArchive'
 import { getCachedComic, type CachedComicRecord } from './comicStorage'
 import type { ViewerPage } from '../components/ComicViewer'
+import { prepareViewerPagesFromArchive } from './extractComicForViewer'
 
 export type CachedComicMeta = Omit<CachedComicRecord, 'data'>
 
@@ -26,10 +26,9 @@ export async function loadViewerPagesFromMegaCache(
     })
   }
 
-  const extracted = await extractComicPages(cached.data, name)
-  const pages = extracted.map((p) => ({
-    name: p.name,
-    url: URL.createObjectURL(p.blob),
-  }))
+  const pages = await prepareViewerPagesFromArchive(cached.data, name)
+  if (pages.length === 0) {
+    throw new Error('No se encontraron imágenes en el archivo en caché.')
+  }
   return { title: name, pages, megaCacheId: id }
 }

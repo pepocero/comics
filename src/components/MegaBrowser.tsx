@@ -1,9 +1,10 @@
 import { File as MegaFile } from 'megajs'
+import type { CSSProperties } from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import { parseMegaFolderUrl } from '../lib/parseMegaFolderUrl'
 import { toArrayBuffer } from '../lib/bufferToArrayBuffer'
 import { formatBytes } from '../lib/formatBytes'
-import { loadViewerPagesFromMegaCache } from '../lib/megaCachedViewer'
+import { loadViewerPagesFromMegaCache, type CachedComicMeta } from '../lib/megaCachedViewer'
 import {
   putCachedComic,
   deleteCachedComic,
@@ -11,17 +12,11 @@ import {
   listCachedComicMeta,
   estimateCacheBytes,
   verifyCachedComicBytes,
-  type CachedComicRecord,
 } from '../lib/comicStorage'
 import { megaFileCacheId } from '../lib/megaFileId'
 import type { ViewerPage } from './ComicViewer'
-import { ContinueReadingSection } from './ContinueReadingSection'
 import type { LocalComicOpenPayload } from './LocalComicOpenButton'
 import { LocalComicOpenButton } from './LocalComicOpenButton'
-
-type CachedMeta = Omit<CachedComicRecord, 'data'>
-
-type MainTab = 'browse' | 'downloads'
 
 type Props = {
   megaFolderUrl: string
@@ -30,11 +25,6 @@ type Props = {
   onChangeSource?: () => void
   onOpenComic: (title: string, pages: ViewerPage[], ctx: { megaCacheId: string }) => void
   onOpenLocalComic: (payload: LocalComicOpenPayload) => void
-  /** Seguir leyendo (visor cerrado) */
-  continueReadingHidden?: boolean
-  onContinueReading: () => void | Promise<void>
-  onForgetReading: () => void
-  continueReadingBusy?: boolean
 }
 
 function sortEntries(files: MegaFile[]): MegaFile[] {
@@ -45,6 +35,14 @@ function sortEntries(files: MegaFile[]): MegaFile[] {
       sensitivity: 'base',
     })
   })
+}
+
+function hueFromString(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) >>> 0
+  }
+  return h % 360
 }
 
 /**
@@ -125,20 +123,15 @@ export function MegaBrowser({
   onChangeSource,
   onOpenComic,
   onOpenLocalComic,
-  continueReadingHidden,
-  onContinueReading,
-  onForgetReading,
-  continueReadingBusy,
 }: Props) {
   const [navOpen, setNavOpen] = useState(false)
-  const [mainTab, setMainTab] = useState<MainTab>('browse')
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadingTree, setLoadingTree] = useState(true)
   const [downloadingName, setDownloadingName] = useState<string | null>(null)
   const [openingCacheId, setOpeningCacheId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [cacheBytes, setCacheBytes] = useState<number>(0)
-  const [cachedRows, setCachedRows] = useState<CachedMeta[]>([])
+  const [cachedRows, setCachedRows] = useState<CachedComicMeta[]>([])
   const [cachedIdSet, setCachedIdSet] = useState<Set<string>>(() => new Set())
   const [downloadProgress, setDownloadProgress] = useState<{
     name: string
@@ -149,9 +142,7 @@ export function MegaBrowser({
   const [breadcrumbs, setBreadcrumbs] = useState<MegaFile[]>([])
 
   const current = breadcrumbs[breadcrumbs.length - 1] ?? null
-  const entries = current?.directory
-    ? sortEntries(current.children ?? [])
-    : []
+  const entries = current?.directory ? sortEntries(current.children ?? []) : []
 
   const refreshCacheInfo = useCallback(() => {
     void listCachedComicMeta().then((rows) => {
@@ -215,7 +206,7 @@ export function MegaBrowser({
     setBreadcrumbs((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev))
   }, [])
 
-  /** Solo descarga y guarda en caché; verifica integridad; el visor se abre desde Descargas. */
+  /** Descarga y guarda en caché; el visor se abre desde Descargas en el menú lateral. */
   const downloadArchiveToCache = useCallback(
     async (file: MegaFile) => {
       const name = file.name || 'cómic'
@@ -232,8 +223,7 @@ export function MegaBrowser({
 
       const id = megaFileCacheId(file)
       if (cachedIdSet.has(id)) {
-        setMainTab('downloads')
-        setToast('Este archivo ya está en Descargas. Ábrelo desde la lista.')
+        setToast('Este archivo ya está en Descargas. Ábrelo desde el menú «Descargas».')
         return
       }
 
@@ -270,8 +260,7 @@ export function MegaBrowser({
         }
 
         refreshCacheInfo()
-        setToast('Descarga guardada correctamente. Ábrela en «Descargas».')
-        setMainTab('downloads')
+        setToast('Descarga guardada. Ábrela en «Descargas» en el menú lateral.')
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         setToast(msg || 'Error al descargar el archivo.')
@@ -284,36 +273,27 @@ export function MegaBrowser({
   )
 
   const openComicFromCache = useCallback(
-    async (meta: CachedMeta) => {
-      const id = meta.id
-      setOpeningCacheId(id)
+    async (cacheId: string) => {
+      const meta = cachedRows.find((r) => r.id === cacheId)
+      if (!meta) {
+        setToast('No se encontró el archivo en el dispositivo. Actualiza la lista.')
+        void refreshCacheInfo()
+        return
+      }
+      setOpeningCacheId(cacheId)
       setToast(null)
       try {
         const payload = await loadViewerPagesFromMegaCache(meta)
         onOpenComic(payload.title, payload.pages, { megaCacheId: payload.megaCacheId })
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error('[ComicRead] Error al abrir desde caché', err)
         setToast(msg || 'Error al abrir el cómic.')
         refreshCacheInfo()
       } finally {
         setOpeningCacheId(null)
       }
     },
-    [onOpenComic, refreshCacheInfo],
-  )
-
-  const removeCachedItem = useCallback(
-    (id: string, displayName: string) => {
-      if (!window.confirm(`¿Quitar «${displayName}» del dispositivo?`)) {
-        return
-      }
-      void deleteCachedComic(id).then(() => {
-        refreshCacheInfo()
-        setToast('Archivo quitado de Descargas.')
-      })
-    },
-    [refreshCacheInfo],
+    [cachedRows, onOpenComic, refreshCacheInfo],
   )
 
   const handleClearCache = useCallback(() => {
@@ -330,13 +310,7 @@ export function MegaBrowser({
 
   if (loadingTree) {
     return (
-      <div className="panel">
-        <ContinueReadingSection
-          hidden={continueReadingHidden}
-          onContinue={onContinueReading}
-          onForget={onForgetReading}
-          busy={continueReadingBusy}
-        />
+      <div className="panel mega-browser-panel">
         <p className="muted">Conectando con MEGA…</p>
       </div>
     )
@@ -344,13 +318,7 @@ export function MegaBrowser({
 
   if (loadError) {
     return (
-      <div className="panel">
-        <ContinueReadingSection
-          hidden={continueReadingHidden}
-          onContinue={onContinueReading}
-          onForget={onForgetReading}
-          busy={continueReadingBusy}
-        />
+      <div className="panel mega-browser-panel">
         <p className="error-msg">{loadError}</p>
         <div className="btn-row">
           <LocalComicOpenButton variant="header" onOpen={onOpenLocalComic} />
@@ -371,9 +339,10 @@ export function MegaBrowser({
     return null
   }
 
-  const pathLabel = breadcrumbs
-    .map((f) => f.name || '…')
-    .join(' / ')
+  const pathLabel = breadcrumbs.map((f) => f.name || '…').join(' / ')
+  const atRoot = breadcrumbs.length === 1
+  const folderEntries = entries.filter((f) => f.directory)
+  const fileEntries = entries.filter((f) => !f.directory)
 
   const navActions = (
     <>
@@ -440,18 +409,17 @@ export function MegaBrowser({
         <div className="browser-path" title={pathLabel}>
           {pathLabel}
         </div>
+        <button
+          type="button"
+          className="browser-header-menu-btn"
+          onClick={() => setNavOpen(true)}
+          aria-label="Menú de la biblioteca"
+          aria-expanded={navOpen}
+        >
+          ☰
+        </button>
         <div className="browser-actions browser-actions--desktop">{navActions}</div>
       </header>
-
-      <button
-        type="button"
-        className="browser-burger-fab"
-        onClick={() => setNavOpen(true)}
-        aria-label="Abrir menú"
-        aria-expanded={navOpen}
-      >
-        ☰
-      </button>
 
       {navOpen ? (
         <div
@@ -476,37 +444,6 @@ export function MegaBrowser({
         </div>
       ) : null}
 
-      <ContinueReadingSection
-        hidden={continueReadingHidden}
-        onContinue={onContinueReading}
-        onForget={onForgetReading}
-        busy={continueReadingBusy}
-      />
-
-      <div className="browser-tabs" role="tablist" aria-label="Vista principal">
-        <button
-          type="button"
-          role="tab"
-          className={`browser-tab${mainTab === 'browse' ? ' browser-tab--active' : ''}`}
-          aria-selected={mainTab === 'browse'}
-          onClick={() => setMainTab('browse')}
-        >
-          Explorar
-        </button>
-        <button
-          type="button"
-          role="tab"
-          className={`browser-tab${mainTab === 'downloads' ? ' browser-tab--active' : ''}`}
-          aria-selected={mainTab === 'downloads'}
-          onClick={() => setMainTab('downloads')}
-        >
-          Descargas
-          {cachedRows.length > 0 ? (
-            <span className="browser-tab-badge">{cachedRows.length}</span>
-          ) : null}
-        </button>
-      </div>
-
       {toast ? (
         <div className="toast" role="status">
           {toast}
@@ -516,151 +453,155 @@ export function MegaBrowser({
         </div>
       ) : null}
 
-      {mainTab === 'browse' ? (
-        <>
-          {breadcrumbs.length > 1 ? (
-            <div className="folder-up-row">
-              <button
-                type="button"
-                className="folder-up-btn"
-                onClick={goUp}
-                aria-label="Subir un nivel de carpeta"
-                title="Subir un nivel"
-              >
-                ↑
-              </button>
-            </div>
-          ) : null}
+      {atRoot && folderEntries.length > 0 ? (
+        <p className="mega-root-hint muted">
+          Carpetas en la raíz de esta biblioteca. Pulsa una para ver su contenido como en MEGA.
+        </p>
+      ) : null}
 
-          <ul className="file-list">
-            {entries.map((f) => {
-              const label = f.name || '(sin nombre)'
-              const isBusy = downloadingName === label
-              if (f.directory) {
-                return (
-                  <li key={megaFileCacheId(f)}>
+      {atRoot && folderEntries.length > 0 ? (
+        <ul className="mega-root-grid" aria-label="Carpetas en la raíz">
+          {folderEntries.map((f) => {
+            const label = f.name || '(sin nombre)'
+            const hue = hueFromString(label)
+            return (
+              <li key={megaFileCacheId(f)}>
+                <button
+                  type="button"
+                  className="mega-folder-card"
+                  onClick={() => enterFolder(f)}
+                  disabled={!!downloadingName || !!openingCacheId}
+                  style={
+                    {
+                      '--mega-card-hue': String(hue),
+                    } as CSSProperties
+                  }
+                >
+                  <span className="mega-folder-card-shine" aria-hidden />
+                  <span className="mega-folder-card-title">{label}</span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
+
+      {atRoot && fileEntries.length > 0 ? (
+        <h2 className="mega-files-heading">Archivos en la raíz</h2>
+      ) : null}
+
+      {breadcrumbs.length > 1 ? (
+        <div className="folder-up-row">
+          <button
+            type="button"
+            className="folder-up-btn"
+            onClick={goUp}
+            aria-label="Subir un nivel de carpeta"
+            title="Subir un nivel"
+          >
+            ↑
+          </button>
+        </div>
+      ) : null}
+
+      <ul className={`file-list${atRoot && folderEntries.length > 0 ? ' file-list--after-grid' : ''}`}>
+        {(atRoot ? fileEntries : entries).map((f) => {
+          const label = f.name || '(sin nombre)'
+          const isBusy = downloadingName === label
+          if (f.directory) {
+            if (atRoot) return null
+            return (
+              <li key={megaFileCacheId(f)}>
+                <button
+                  type="button"
+                  className="file-row folder"
+                  onClick={() => enterFolder(f)}
+                  disabled={!!downloadingName || !!openingCacheId}
+                >
+                  <span className="file-icon">📁</span>
+                  <span className="file-name">{label}</span>
+                </button>
+              </li>
+            )
+          }
+          const cacheId = megaFileCacheId(f)
+          const isCached = cachedIdSet.has(cacheId)
+          const showProgress = isBusy && downloadProgress && downloadProgress.name === label
+          const busyOpen = openingCacheId === cacheId
+
+          if (isCached) {
+            return (
+              <li key={cacheId}>
+                <div className="file-row file file--cached file-row-cached">
+                  <div className="file-row-top">
+                    <span className="file-icon">📄</span>
+                    <span className="file-name">{label}</span>
+                    {f.size != null ? (
+                      <span className="file-size">{formatBytes(f.size)}</span>
+                    ) : null}
+                    <span className="file-busy file-busy--ok">En el dispositivo</span>
+                  </div>
+                  <div className="file-row-cached-actions">
                     <button
                       type="button"
-                      className="file-row folder"
-                      onClick={() => enterFolder(f)}
+                      className="downloads-open-btn file-open-cached-btn"
+                      onClick={() => void openComicFromCache(cacheId)}
                       disabled={!!downloadingName || !!openingCacheId}
                     >
-                      <span className="file-icon">📁</span>
-                      <span className="file-name">{label}</span>
+                      {busyOpen ? 'Abriendo…' : 'Abrir'}
                     </button>
-                  </li>
-                )
-              }
-              const cacheId = megaFileCacheId(f)
-              const isCached = cachedIdSet.has(cacheId)
-              const showProgress =
-                isBusy && downloadProgress && downloadProgress.name === label
-              return (
-                <li key={cacheId}>
-                  <button
-                    type="button"
-                    className={`file-row file${isCached ? ' file--cached' : ''}`}
-                    title={
-                      isCached
-                        ? 'Ya guardado en Descargas — ábrelo desde la pestaña Descargas'
-                        : 'Descargar a este dispositivo (luego ábrelo en Descargas)'
-                    }
-                    onClick={() => void downloadArchiveToCache(f)}
-                    disabled={!!downloadingName || !!openingCacheId}
-                  >
-                    <div className="file-row-top">
-                      <span className="file-icon">📄</span>
-                      <span className="file-name">{label}</span>
-                      {f.size != null ? (
-                        <span className="file-size">{formatBytes(f.size)}</span>
-                      ) : null}
-                      {isBusy ? (
-                        <span className="file-busy">Descargando…</span>
-                      ) : isCached ? (
-                        <span className="file-busy file-busy--ok">En Descargas</span>
-                      ) : null}
-                    </div>
-                    {showProgress ? (
-                      <div
-                        className="file-download-row"
-                        role="progressbar"
-                        aria-valuenow={downloadProgress.percent}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-label={`Descarga ${downloadProgress.percent} por ciento`}
-                      >
-                        <div className="file-download-track">
-                          <div
-                            className="file-download-fill"
-                            style={{ width: `${downloadProgress.percent}%` }}
-                          />
-                        </div>
-                        <span className="file-download-pct">{downloadProgress.percent}%</span>
-                      </div>
-                    ) : null}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
+                  </div>
+                </div>
+              </li>
+            )
+          }
 
-          {entries.length === 0 ? (
-            <p className="muted empty-folder">Carpeta vacía.</p>
-          ) : null}
-        </>
-      ) : (
-        <div className="downloads-panel">
-          <p className="downloads-panel-hint muted">
-            Los archivos descargados desde MEGA se guardan aquí. Verifica la descarga y ábrelos en el visor
-            cuando quieras leer.
-          </p>
-          {cachedRows.length === 0 ? (
-            <p className="muted downloads-empty">No hay descargas todavía. Explora una carpeta y pulsa un
-            cómic para descargarlo.</p>
-          ) : (
-            <ul className="downloads-list">
-              {cachedRows.map((row) => {
-                const busy = openingCacheId === row.id
-                const title = row.name.replace(/\.[^.]+$/, '') || row.name
-                return (
-                  <li key={row.id} className="downloads-row">
-                    <div className="downloads-row-info">
-                      <span className="downloads-row-name" title={row.name}>
-                        {title}
-                      </span>
-                      <span className="downloads-row-meta">
-                        {formatBytes(row.size)} ·{' '}
-                        {new Date(row.downloadedAt).toLocaleString('es', {
-                          dateStyle: 'short',
-                          timeStyle: 'short',
-                        })}
-                      </span>
+          return (
+            <li key={cacheId}>
+              <button
+                type="button"
+                className="file-row file"
+                title="Descargar a este dispositivo (luego ábrelo aquí o en Descargas)"
+                onClick={() => void downloadArchiveToCache(f)}
+                disabled={!!downloadingName || !!openingCacheId}
+              >
+                <div className="file-row-top">
+                  <span className="file-icon">📄</span>
+                  <span className="file-name">{label}</span>
+                  {f.size != null ? (
+                    <span className="file-size">{formatBytes(f.size)}</span>
+                  ) : null}
+                  {isBusy ? (
+                    <span className="file-busy">Descargando…</span>
+                  ) : null}
+                </div>
+                {showProgress ? (
+                  <div
+                    className="file-download-row"
+                    role="progressbar"
+                    aria-valuenow={downloadProgress.percent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`Descarga ${downloadProgress.percent} por ciento`}
+                  >
+                    <div className="file-download-track">
+                      <div
+                        className="file-download-fill"
+                        style={{ width: `${downloadProgress.percent}%` }}
+                      />
                     </div>
-                    <div className="downloads-row-actions">
-                      <button
-                        type="button"
-                        className="downloads-open-btn"
-                        onClick={() => void openComicFromCache(row)}
-                        disabled={!!downloadingName || !!openingCacheId}
-                      >
-                        {busy ? 'Abriendo…' : 'Abrir'}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-secondary downloads-remove-btn"
-                        onClick={() => removeCachedItem(row.id, row.name)}
-                        disabled={!!openingCacheId}
-                      >
-                        Quitar
-                      </button>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
-      )}
+                    <span className="file-download-pct">{downloadProgress.percent}%</span>
+                  </div>
+                ) : null}
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+
+      {(atRoot ? fileEntries : entries).length === 0 && !(atRoot && folderEntries.length > 0) ? (
+        <p className="muted empty-folder">Carpeta vacía.</p>
+      ) : null}
     </div>
   )
 }
