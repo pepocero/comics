@@ -111,6 +111,24 @@ export async function clearAllCachedComics(): Promise<void> {
   })
 }
 
+export async function clearAllLocalReadingBlobs(): Promise<void> {
+  const db = await openDb()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_LOCAL_READING, 'readwrite')
+    const st = tx.objectStore(STORE_LOCAL_READING)
+    const r = st.clear()
+    r.onerror = (): void => {
+      reject(r.error ?? new Error('clear local reading failed'))
+    }
+    r.onsuccess = (): void => {
+      resolve()
+    }
+    tx.oncomplete = (): void => {
+      db.close()
+    }
+  })
+}
+
 /** Comprueba que el registro guardado coincide con el tamaño esperado (descarga íntegra). */
 export async function verifyCachedComicBytes(
   id: string,

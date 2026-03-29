@@ -275,7 +275,7 @@ export default function App() {
     return (
       <>
         <BibliotecaSectionBackdrop backdropKey="settings" layout="fullscreen">
-          <SettingsPanel onSaved={refresh} />
+          <SettingsPanel onSaved={refresh} initialSetup />
         </BibliotecaSectionBackdrop>
         {viewerEl}
       </>

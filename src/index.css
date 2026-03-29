@@ -74,6 +74,139 @@ code {
   letter-spacing: -0.02em;
 }
 
+.settings-subsection {
+  margin-bottom: 1.75rem;
+}
+
+.settings-h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.settings-sub-lead {
+  margin-bottom: 1rem;
+}
+
+.settings-env-hint {
+  margin: 0 0 1.25rem;
+}
+
+.settings-cache-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.settings-toast {
+  margin: 0 0 0.75rem;
+  color: #9ab8ff;
+  font-size: 0.9rem;
+}
+
+.settings-empty {
+  margin: 0 0 1rem;
+}
+
+.settings-cache-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.settings-select-all {
+  font-size: 0.9rem;
+  color: #c8c4dc;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-select-all input {
+  vertical-align: middle;
+}
+
+.settings-cache-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.settings-cache-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  background: rgba(14, 14, 22, 0.75);
+  border: 1px solid #2a2840;
+  border-radius: 10px;
+}
+
+.settings-cache-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-cache-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.settings-cache-name {
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.settings-cache-meta {
+  font-size: 0.8rem;
+  color: #8a8698;
+}
+
+.settings-cache-one-btn {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.settings-danger-zone {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #2e2a44;
+}
+
+.settings-danger-btn {
+  width: 100%;
+  background: #4a2a32;
+  color: #f0d0d4;
+  border: 1px solid #6a3a44;
+}
+
+.settings-danger-btn:hover:not(:disabled) {
+  background: #5a323c;
+}
+
+.settings-footer-actions {
+  margin-top: 1.5rem;
+}
+
+.settings-warn {
+  margin-top: 1.25rem;
+}
+
 .lead {
   color: #b8b4c8;
   margin: 0 0 1.25rem;
