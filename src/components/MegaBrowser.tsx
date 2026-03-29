@@ -1,5 +1,4 @@
 import { File as MegaFile } from 'megajs'
-import type { CSSProperties } from 'react'
 import { useCallback, useEffect, useState } from 'react'
 import { parseMegaFolderUrl } from '../lib/parseMegaFolderUrl'
 import { toArrayBuffer } from '../lib/bufferToArrayBuffer'
@@ -14,9 +13,11 @@ import {
   verifyCachedComicBytes,
 } from '../lib/comicStorage'
 import { megaFileCacheId } from '../lib/megaFileId'
+import { isMegaSeparatorPlaceholderFolder } from '../lib/megaPlaceholderFolder'
 import type { ViewerPage } from './ComicViewer'
 import type { LocalComicOpenPayload } from './LocalComicOpenButton'
 import { LocalComicOpenButton } from './LocalComicOpenButton'
+import { MegaRootFolderCards } from './MegaRootFolderCards'
 
 type Props = {
   megaFolderUrl: string
@@ -35,14 +36,6 @@ function sortEntries(files: MegaFile[]): MegaFile[] {
       sensitivity: 'base',
     })
   })
-}
-
-function hueFromString(s: string): number {
-  let h = 0
-  for (let i = 0; i < s.length; i++) {
-    h = (h * 31 + s.charCodeAt(i)) >>> 0
-  }
-  return h % 360
 }
 
 /**
@@ -142,7 +135,10 @@ export function MegaBrowser({
   const [breadcrumbs, setBreadcrumbs] = useState<MegaFile[]>([])
 
   const current = breadcrumbs[breadcrumbs.length - 1] ?? null
-  const entries = current?.directory ? sortEntries(current.children ?? []) : []
+  const entriesRaw = current?.directory ? sortEntries(current.children ?? []) : []
+  const entries = entriesRaw.filter(
+    (f) => !(f.directory && isMegaSeparatorPlaceholderFolder(f.name)),
+  )
 
   const refreshCacheInfo = useCallback(() => {
     void listCachedComicMeta().then((rows) => {
@@ -455,35 +451,18 @@ export function MegaBrowser({
 
       {atRoot && folderEntries.length > 0 ? (
         <p className="mega-root-hint muted">
-          Carpetas en la raíz de esta biblioteca. Pulsa una para ver su contenido como en MEGA.
+          Carpetas en la raíz de esta biblioteca. Pulsa una para ver su contenido como en MEGA. Las
+          portadas opcionales se configuran en <code>public/bibliotecas/</code> (ver{' '}
+          <code>covers.json</code>).
         </p>
       ) : null}
 
       {atRoot && folderEntries.length > 0 ? (
-        <ul className="mega-root-grid" aria-label="Carpetas en la raíz">
-          {folderEntries.map((f) => {
-            const label = f.name || '(sin nombre)'
-            const hue = hueFromString(label)
-            return (
-              <li key={megaFileCacheId(f)}>
-                <button
-                  type="button"
-                  className="mega-folder-card"
-                  onClick={() => enterFolder(f)}
-                  disabled={!!downloadingName || !!openingCacheId}
-                  style={
-                    {
-                      '--mega-card-hue': String(hue),
-                    } as CSSProperties
-                  }
-                >
-                  <span className="mega-folder-card-shine" aria-hidden />
-                  <span className="mega-folder-card-title">{label}</span>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
+        <MegaRootFolderCards
+          folders={folderEntries}
+          disabled={!!downloadingName || !!openingCacheId}
+          onOpenFolder={enterFolder}
+        />
       ) : null}
 
       {atRoot && fileEntries.length > 0 ? (

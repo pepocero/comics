@@ -95,15 +95,18 @@ export function AppShell({
     <div className="app-shell">
       <aside className="app-shell-sidebar app-shell-sidebar--desktop">{navBody}</aside>
 
-      <button
-        type="button"
-        className="app-shell-nav-fab"
-        onClick={() => setDrawerOpen(true)}
-        aria-label="Abrir menú de navegación"
-        aria-expanded={drawerOpen}
-      >
-        ☰
-      </button>
+      <div className="app-shell-mobile-bar">
+        <span className="app-shell-mobile-title">ComicRead</span>
+        <button
+          type="button"
+          className="app-shell-burger"
+          onClick={() => setDrawerOpen(true)}
+          aria-label="Abrir menú de navegación"
+          aria-expanded={drawerOpen}
+        >
+          ☰
+        </button>
+      </div>
 
       {drawerOpen ? (
         <div

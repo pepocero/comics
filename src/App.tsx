@@ -7,6 +7,7 @@ import {
   needsSourceSelection,
   setMegaLibraryEntered,
 } from './config/megaSettings'
+import { BibliotecaSectionBackdrop } from './components/BibliotecaSectionBackdrop'
 import { AppShell, type ShellNavId } from './components/AppShell'
 import { ContinueReadingPage } from './components/ContinueReadingPage'
 import { DownloadsSection } from './components/DownloadsSection'
@@ -273,7 +274,9 @@ export default function App() {
   if (needsManualSetup) {
     return (
       <>
-        <SettingsPanel onSaved={refresh} />
+        <BibliotecaSectionBackdrop backdropKey="settings" layout="fullscreen">
+          <SettingsPanel onSaved={refresh} />
+        </BibliotecaSectionBackdrop>
         {viewerEl}
       </>
     )
@@ -283,13 +286,15 @@ export default function App() {
     return (
       <>
         <PwaUpdateGate />
-        <SettingsPanel
-          onSaved={() => {
-            refresh()
-            setShowSettings(false)
-          }}
-          onCancel={() => setShowSettings(false)}
-        />
+        <BibliotecaSectionBackdrop backdropKey="settings" layout="fullscreen">
+          <SettingsPanel
+            onSaved={() => {
+              refresh()
+              setShowSettings(false)
+            }}
+            onCancel={() => setShowSettings(false)}
+          />
+        </BibliotecaSectionBackdrop>
         {viewerEl}
       </>
     )
@@ -396,7 +401,13 @@ export default function App() {
         onOpenSettings={() => setShowSettings(true)}
         navHidden={continueHidden}
       >
-        {shellContent}
+        {section === 'library' ? (
+          shellContent
+        ) : (
+          <BibliotecaSectionBackdrop backdropKey={section} layout="inset">
+            {shellContent}
+          </BibliotecaSectionBackdrop>
+        )}
       </AppShell>
       {viewerEl}
     </>
