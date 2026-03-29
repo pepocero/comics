@@ -37,7 +37,6 @@ import {
 } from './lib/comicStorage'
 import type { CachedComicMeta } from './lib/megaCachedViewer'
 import { loadViewerPagesFromMegaCache } from './lib/megaCachedViewer'
-import './index.css'
 
 type ViewerState = {
   title: string

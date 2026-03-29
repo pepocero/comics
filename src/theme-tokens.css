@@ -1,0 +1,135 @@
+/* Tokens de tema: oscuro por defecto; [data-theme="light"] en <html> */
+
+:root {
+  color-scheme: dark;
+  --cr-bg: #0a0a0f;
+  --cr-text: #e8e6f2;
+  --cr-muted: #8a8698;
+  --cr-text-dim: #b8b4c8;
+  --cr-text-soft: #c8c4dc;
+  --cr-label: #a09cb0;
+  --cr-link: #9ab8ff;
+  --cr-elevated: #12121a;
+  --cr-surface: #14141e;
+  --cr-surface-soft: #0e0e14;
+  --cr-border-strong: #2a2840;
+  --cr-border-soft: #252538;
+  --cr-border-muted: #2e2a44;
+  --cr-code-bg: #1e1e2e;
+  --cr-input-text: #f0eef8;
+  --cr-btn-primary: #3d5a9e;
+  --cr-btn-secondary-bg: #2a2840;
+  --cr-btn-secondary-fg: #ddd;
+  --cr-error: #ff8a8a;
+  --cr-warn-text: #c4b8a0;
+  --cr-warn-border: #6a5a40;
+  --cr-danger-bg: #4a2a32;
+  --cr-danger-fg: #f0d0d4;
+  --cr-danger-border: #6a3a44;
+  --cr-danger-hover: #5a323c;
+  --cr-toast-muted: #9ab8ff;
+  /* Menos opaco: se ve más el fondo (ironman / contenido detrás del ::before) */
+  --cr-body-overlay: linear-gradient(
+    180deg,
+    rgba(8, 8, 14, 0.35) 0%,
+    rgba(10, 10, 18, 0.5) 50%,
+    rgba(10, 10, 15, 0.62) 100%
+  );
+  --cr-sidebar-bg: linear-gradient(180deg, rgba(18, 16, 28, 0.96) 0%, rgba(10, 10, 16, 0.98) 100%);
+  --cr-sidebar-border: rgba(46, 42, 68, 0.9);
+  --cr-mobile-bar-bg: rgba(14, 14, 22, 0.96);
+  --cr-biblioteca-solid: #0e0c14;
+  /* Capa sobre la portada: más transparente para que se vea bien la imagen */
+  --cr-biblioteca-overlay: linear-gradient(
+    180deg,
+    rgba(8, 6, 14, 0.38) 0%,
+    rgba(10, 8, 18, 0.55) 45%,
+    rgba(10, 8, 18, 0.72) 100%
+  );
+  --cr-settings-row-bg: rgba(14, 14, 22, 0.75);
+  --cr-theme-color: #12121a;
+  --cr-viewer-bg: #050508;
+  --cr-success: #3ecf8e;
+  --cr-open-border: #4a5a9e;
+  --cr-open-gradient: linear-gradient(180deg, #3d4a8a 0%, #2e3568 100%);
+  --cr-open-fg: #f0eeff;
+  --cr-tab-badge-bg: #2e3568;
+  --cr-tab-badge-fg: #c8d4ff;
+  --cr-pages-open-bg: #3d4a70;
+  --cr-raised: #1a1a28;
+  --cr-deep-purple: #2a2238;
+  --cr-home-card-border: #3d3558;
+  --cr-drawer-bg: #16141f;
+  --cr-slider-track: #1e1c2a;
+  --cr-text-subtle: #9a96b0;
+  --cr-text-faint: #7a7690;
+  --cr-text-page: #a8a4bc;
+  --cr-text-zoom: #a8a4b8;
+  --cr-home-title: #f4f2fc;
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+  --cr-bg: #f2f0f8;
+  --cr-text: #1a1824;
+  --cr-muted: #5c5868;
+  --cr-text-dim: #4a4658;
+  --cr-text-soft: #3d3a4c;
+  --cr-label: #5a5668;
+  --cr-link: #1e4a9e;
+  --cr-elevated: #ffffff;
+  --cr-surface: #faf9fc;
+  --cr-surface-soft: #f5f3fa;
+  --cr-border-strong: #c5c0d8;
+  --cr-border-soft: #d8d4e8;
+  --cr-border-muted: #ccc8dc;
+  --cr-code-bg: #ece8f4;
+  --cr-input-text: #1a1824;
+  --cr-btn-primary: #3d5a9e;
+  --cr-btn-secondary-bg: #e4e0f0;
+  --cr-btn-secondary-fg: #2a2840;
+  --cr-error: #c42828;
+  --cr-warn-text: #6a5520;
+  --cr-warn-border: #c4a860;
+  --cr-danger-bg: #f0d8dc;
+  --cr-danger-fg: #6a2028;
+  --cr-danger-border: #c08088;
+  --cr-danger-hover: #e8c8d0;
+  --cr-toast-muted: #1e4a9e;
+  --cr-body-overlay: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.38) 0%,
+    rgba(242, 240, 248, 0.52) 50%,
+    rgba(236, 232, 248, 0.65) 100%
+  );
+  --cr-sidebar-bg: linear-gradient(180deg, #faf8ff 0%, #ece8f4 100%);
+  --cr-sidebar-border: rgba(180, 175, 205, 0.9);
+  --cr-mobile-bar-bg: rgba(255, 255, 255, 0.96);
+  --cr-biblioteca-solid: #e8e4f0;
+  --cr-biblioteca-overlay: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.35) 0%,
+    rgba(248, 244, 255, 0.5) 45%,
+    rgba(240, 236, 250, 0.68) 100%
+  );
+  --cr-settings-row-bg: rgba(255, 255, 255, 0.85);
+  --cr-theme-color: #e8e4f0;
+  --cr-viewer-bg: #ece8f0;
+  --cr-success: #238e5c;
+  --cr-open-border: #4a5a9e;
+  --cr-open-gradient: linear-gradient(180deg, #5a6ec0 0%, #4a5ab0 100%);
+  --cr-open-fg: #faf8ff;
+  --cr-tab-badge-bg: #d4dcf8;
+  --cr-tab-badge-fg: #2a3a78;
+  --cr-pages-open-bg: #b8c4e8;
+  --cr-raised: #ebe8f4;
+  --cr-deep-purple: #e0dce8;
+  --cr-home-card-border: #c8c4d8;
+  --cr-drawer-bg: #faf8ff;
+  --cr-slider-track: #e4e0ec;
+  --cr-text-subtle: #5a5668;
+  --cr-text-faint: #6a6678;
+  --cr-text-page: #4a4658;
+  --cr-text-zoom: #5a5668;
+  --cr-home-title: #1a1824;
+}

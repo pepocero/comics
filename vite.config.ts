@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import type { Plugin } from 'vite'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -17,6 +18,33 @@ function buildId(): string {
 
 const __BUILD_ID__ = buildId()
 
+/**
+ * Emite `build-meta.json` en cada `vite build` con contenido único (`builtAt`).
+ * Workbox lo precachea (ver `globPatterns` con `json`) para que el `sw.js` cambie en cada
+ * despliegue y la PWA pueda detectar actualización tras `git push` + CI.
+ */
+function comicreadBuildMetaPlugin(version: string, buildId: string): Plugin {
+  return {
+    name: 'comicread-build-meta',
+    generateBundle() {
+      const source = JSON.stringify(
+        {
+          version,
+          buildId,
+          builtAt: new Date().toISOString(),
+        },
+        null,
+        0,
+      )
+      this.emitFile({
+        type: 'asset',
+        fileName: 'build-meta.json',
+        source,
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   define: {
@@ -25,6 +53,7 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    comicreadBuildMetaPlugin(pkg.version, __BUILD_ID__),
     VitePWA({
       /** `prompt` + `PwaUpdateGate` aplican la actualización en cuanto hay nueva versión desplegada */
       registerType: 'prompt',
@@ -50,7 +79,8 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,svg,woff2,wasm}'],
+        /** Incluye `json` para `build-meta.json` (nuevo contenido cada build → nuevo precache → nuevo SW). */
+        globPatterns: ['**/*.{js,css,html,ico,svg,woff2,wasm,json}'],
         cleanupOutdatedCaches: true,
         clientsClaim: true,
         skipWaiting: false,

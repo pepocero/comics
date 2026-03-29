@@ -8,3 +8,6 @@
 
 /manifest.webmanifest
   Cache-Control: no-cache, must-revalidate
+
+/build-meta.json
+  Cache-Control: no-cache, must-revalidate

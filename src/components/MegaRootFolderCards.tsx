@@ -44,7 +44,7 @@ export function MegaRootFolderCards({ folders, disabled, onOpenFolder }: Props) 
           ['--mega-card-hue']: String(hue),
           ...(hasCover
             ? {
-                backgroundImage: `linear-gradient(180deg, rgba(6,4,12,0.2) 0%, rgba(6,4,12,0.82) 55%, rgba(6,4,12,0.95) 100%), url(${JSON.stringify(coverUrl)})`,
+                backgroundImage: `linear-gradient(180deg, rgba(6,4,12,0.1) 0%, rgba(6,4,12,0.38) 50%, rgba(6,4,12,0.62) 100%), url(${JSON.stringify(coverUrl)})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
               }

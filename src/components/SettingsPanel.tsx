@@ -15,6 +15,7 @@ import {
 import type { CachedComicMeta } from '../lib/megaCachedViewer'
 import { clearAllReadingProgress, getReadingList, removeReadingProgress } from '../lib/readingProgress'
 import { formatBytes } from '../lib/formatBytes'
+import { applyTheme, getStoredTheme, type AppTheme } from '../lib/appTheme'
 import { AppVersionFooter } from './AppVersionFooter'
 
 type Props = {
@@ -40,6 +41,12 @@ export function SettingsPanel({ onSaved, onCancel, initialSetup = false }: Props
 
   const [urlValue, setUrlValue] = useState(() => (fromEnv ? '' : getManualMegaFolderUrl()))
   const [urlError, setUrlError] = useState<string | null>(null)
+  const [theme, setTheme] = useState<AppTheme>(() => getStoredTheme())
+
+  function handleThemeChange(next: AppTheme): void {
+    setTheme(next)
+    applyTheme(next)
+  }
 
   const refreshList = useCallback(async () => {
     setLoadingList(true)
@@ -318,7 +325,39 @@ export function SettingsPanel({ onSaved, onCancel, initialSetup = false }: Props
 
   return (
     <section className="panel settings-panel">
-      <h1>Ajustes</h1>
+      {onCancel ? (
+        <div className="settings-panel-back-row">
+          <button type="button" className="btn-secondary settings-back-btn" onClick={onCancel} disabled={busy}>
+            Volver
+          </button>
+        </div>
+      ) : null}
+      <h1 className="settings-panel-title">Ajustes</h1>
+
+      <section className="settings-subsection" aria-labelledby="appearance-heading">
+        <h2 id="appearance-heading" className="settings-h2">
+          Apariencia
+        </h2>
+        <p className="lead settings-sub-lead">Modo de color de la interfaz (se guarda en este dispositivo).</p>
+        <div className="settings-theme-row" role="group" aria-label="Modo de color">
+          <button
+            type="button"
+            className={`settings-theme-btn${theme === 'dark' ? ' settings-theme-btn--active' : ''}`}
+            onClick={() => handleThemeChange('dark')}
+            aria-pressed={theme === 'dark'}
+          >
+            Oscuro
+          </button>
+          <button
+            type="button"
+            className={`settings-theme-btn${theme === 'light' ? ' settings-theme-btn--active' : ''}`}
+            onClick={() => handleThemeChange('light')}
+            aria-pressed={theme === 'light'}
+          >
+            Claro
+          </button>
+        </div>
+      </section>
 
       {fromEnv ? (
         <p className="lead settings-env-hint">
@@ -331,14 +370,6 @@ export function SettingsPanel({ onSaved, onCancel, initialSetup = false }: Props
       {!fromEnv ? megaUrlSection : null}
 
       {cacheSection}
-
-      <div className="btn-row settings-footer-actions">
-        {onCancel ? (
-          <button type="button" className="btn-secondary" onClick={onCancel} disabled={busy}>
-            Volver
-          </button>
-        ) : null}
-      </div>
 
       <p className="warn settings-warn">
         Las descargas usan datos y espacio. Los archivos se guardan en el almacenamiento del
