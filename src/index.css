@@ -1380,7 +1380,7 @@ button:disabled {
   }
 }
 
-/* Fondo con portada de public/bibliotecas (Inicio, Fuentes, Descargas, Seguir leyendo, Ajustes) */
+/* Fondo: Inicio → public/portadas/portada_generica.png; resto → public/bibliotecas/… */
 .biblioteca-section-backdrop {
   --biblioteca-bg-image: none;
   position: relative;
@@ -1593,6 +1593,25 @@ button:disabled {
 .home-page {
   max-width: 40rem;
   margin: 0 auto;
+}
+
+/* Legibilidad sobre fondo con imagen */
+.home-page .home-eyebrow,
+.home-page .home-lead,
+.home-page .home-h2,
+.home-page .home-steps strong,
+.home-page .home-steps p,
+.home-page .home-note {
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.9),
+    0 2px 12px rgba(0, 0, 0, 0.55);
+}
+
+.home-page .home-title {
+  text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.95),
+    0 3px 18px rgba(0, 0, 0, 0.6),
+    0 0 1px rgba(0, 0, 0, 0.85);
 }
 
 .home-hero {
@@ -1846,6 +1865,37 @@ button:disabled {
   background-blend-mode: normal;
 }
 
+.mega-folder-card--loading-cover {
+  cursor: wait;
+}
+
+.mega-folder-card-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(6, 4, 12, 0.42);
+  pointer-events: none;
+}
+
+.mega-folder-card-spinner {
+  box-sizing: border-box;
+  width: 2.15rem;
+  height: 2.15rem;
+  border: 3px solid rgba(255, 255, 255, 0.22);
+  border-top-color: rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  animation: mega-folder-card-spin 0.7s linear infinite;
+}
+
+@keyframes mega-folder-card-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .mega-folder-card:hover:not(:disabled) {
   transform: translateY(-3px);
   border-color: rgba(120, 130, 200, 0.65);
@@ -1860,6 +1910,7 @@ button:disabled {
 .mega-folder-card-shine {
   position: absolute;
   inset: 0;
+  z-index: 1;
   background: linear-gradient(
     125deg,
     rgba(255, 255, 255, 0.14) 0%,
@@ -1874,6 +1925,7 @@ button:disabled {
   left: 0;
   right: 0;
   bottom: 0;
+  z-index: 3;
   padding: 0.65rem 0.65rem 0.75rem;
   font-size: 0.82rem;
   font-weight: 600;

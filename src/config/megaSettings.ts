@@ -84,6 +84,28 @@ export function getStoredSourceSlot(): MegaSourceSlot | null {
   return null
 }
 
+/**
+ * Slot de env activo → `public/portadas/url{slot+1}/`
+ * (`VITE_MEGA_FOLDER_URL_1` → url1, `URL_2` → url2, …).
+ */
+export function getMegaSourceSlotForPortada(activeFolderUrl: string): MegaSourceSlot | null {
+  if (isUsingManualMegaUrl()) return null
+  const trimmed = activeFolderUrl.trim()
+  if (!trimmed) return null
+  const sources = getConfiguredMegaSources()
+  if (sources.length === 0) return null
+
+  const norm = (s: string): string => s.trim()
+  const found = sources.find((s) => norm(s.url) === norm(trimmed))
+  if (found) return found.slot
+
+  if (sources.length === 1) return sources[0].slot
+
+  const slot = getStoredSourceSlot()
+  if (slot === null) return null
+  return sources.some((s) => s.slot === slot) ? slot : null
+}
+
 export function setStoredSourceSlot(slot: MegaSourceSlot): void {
   localStorage.setItem(LS_SLOT, String(slot))
 }

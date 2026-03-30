@@ -1,8 +1,3 @@
-Portadas para las carpetas en la raíz de Biblioteca MEGA
-============================================================
+Carpeta reservada para fondos de sección (Inicio, Fuentes, etc.) si los configuras más adelante.
 
-Archivos: comic (0).jpg … comic (32).jpg (33 imágenes en total).
-Orden en covers.json = orden de uso por carpeta (1ª carpeta → primera imagen, etc.).
-Cuando hay más carpetas que imágenes, se repite desde comic (0).jpg.
-
-Para añadir o quitar imágenes, edita covers.json y coloca los archivos en esta carpeta.
+Las **portadas de las tarjetas de carpetas MEGA** no usan archivos de aquí: la imagen sale solo de cada carpeta en la nube (una imagen por carpeta).

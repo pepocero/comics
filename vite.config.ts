@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Plugin } from 'vite'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
@@ -45,8 +45,27 @@ function comicreadBuildMetaPlugin(version: string, buildId: string): Plugin {
   }
 }
 
+/** URL absoluta de og:image para redes (WhatsApp exige https + dominio). Ver `VITE_SITE_ORIGIN` en `.env.example`. */
+function comicreadOgMetaPlugin(siteOrigin: string): Plugin {
+  const imagePath = '/portadas/portada_generica.png'
+  const ogImage = siteOrigin ? `${siteOrigin}${imagePath}` : imagePath
+  const ogUrl = siteOrigin ? `${siteOrigin}/` : '/'
+  return {
+    name: 'comicread-og-meta',
+    transformIndexHtml(html) {
+      return html
+        .replaceAll('__COMICREAD_OG_IMAGE__', ogImage)
+        .replaceAll('__COMICREAD_OG_URL__', ogUrl)
+    },
+  }
+}
+
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  const siteOrigin = (env.VITE_SITE_ORIGIN ?? '').replace(/\/$/, '')
+
+  return {
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_ID__: JSON.stringify(__BUILD_ID__),
@@ -54,6 +73,7 @@ export default defineConfig({
   plugins: [
     react(),
     comicreadBuildMetaPlugin(pkg.version, __BUILD_ID__),
+    comicreadOgMetaPlugin(siteOrigin),
     VitePWA({
       /** `prompt` + `PwaUpdateGate` aplican la actualización en cuanto hay nueva versión desplegada */
       registerType: 'prompt',
@@ -94,4 +114,5 @@ export default defineConfig({
       },
     }),
   ],
+  }
 })

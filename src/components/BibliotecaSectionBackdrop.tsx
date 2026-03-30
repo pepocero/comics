@@ -7,9 +7,11 @@ export type BibliotecaBackdropKey =
   | 'continue'
   | 'settings'
 
-/** Archivo en `public/bibliotecas/` por sección (mismo criterio de nombre que `covers.json`). */
+/**
+ * Ruta bajo `public/` por sección: nombre en `bibliotecas/` o ruta absoluta desde la raíz del sitio.
+ */
 const SECTION_BACKDROP_FILE: Record<BibliotecaBackdropKey, string> = {
-  home: 'comic (3).jpg',
+  home: '/portadas/portada_generica.png',
   sources: 'comic (11).jpg',
   downloads: 'comic (13).jpg',
   continue: 'comic (25).jpg',
@@ -17,7 +19,9 @@ const SECTION_BACKDROP_FILE: Record<BibliotecaBackdropKey, string> = {
 }
 
 function backdropUrlForKey(key: BibliotecaBackdropKey): string {
-  const name = SECTION_BACKDROP_FILE[key].trim().replace(/^\/+/, '')
+  const raw = SECTION_BACKDROP_FILE[key].trim()
+  if (raw.startsWith('/')) return raw
+  const name = raw.replace(/^\/+/, '')
   return `/bibliotecas/${encodeURI(name)}`
 }
 
