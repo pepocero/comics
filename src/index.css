@@ -473,159 +473,6 @@ button:disabled {
   color: var(--cr-success);
 }
 
-.browser-header {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 0.5rem 0.75rem;
-  padding: 0.55rem 0.75rem;
-  padding-right: 0.65rem;
-  background: linear-gradient(180deg, var(--cr-surface) 0%, var(--cr-surface-soft) 100%);
-  border-bottom: 1px solid var(--cr-border-soft);
-}
-
-@media (min-width: 768px) {
-  .browser-header {
-    flex-wrap: wrap;
-    gap: 0.5rem 1rem;
-    padding: 0.65rem 1rem;
-    padding-right: 1rem;
-  }
-}
-
-.browser-path {
-  flex: 1 1 12rem;
-  font-size: 0.85rem;
-  color: var(--cr-text-soft);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.browser-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  align-items: center;
-}
-
-.browser-actions--desktop {
-  display: none;
-}
-
-@media (min-width: 768px) {
-  .browser-actions--desktop {
-    display: flex;
-  }
-}
-
-/** Menú del explorador MEGA en móvil: botón en la cabecera (no otro FAB flotante). */
-.browser-header-menu-btn {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 2.45rem;
-  height: 2.45rem;
-  padding: 0;
-  border-radius: 8px;
-  border: 1px solid var(--cr-border-muted);
-  background: linear-gradient(180deg, var(--cr-border-strong) 0%, var(--cr-raised) 100%);
-  color: var(--cr-text);
-  font-size: 1.2rem;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.browser-header-menu-btn:hover {
-  border-color: var(--cr-link);
-  color: #fff;
-}
-
-@media (max-width: 767px) {
-  .browser-header-menu-btn {
-    display: inline-flex;
-  }
-}
-
-.browser-drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  background: rgba(6, 4, 12, 0.72);
-  backdrop-filter: blur(4px);
-  display: flex;
-  justify-content: flex-end;
-  align-items: stretch;
-}
-
-.browser-drawer {
-  width: min(20rem, 92vw);
-  max-width: 100%;
-  background: linear-gradient(180deg, var(--cr-drawer-bg) 0%, var(--cr-surface-soft) 100%);
-  border-left: 1px solid var(--cr-border-muted);
-  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
-  animation: browser-drawer-in 0.2s ease-out;
-}
-
-@keyframes browser-drawer-in {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-.browser-drawer-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--cr-border-soft);
-  font-size: 1rem;
-  color: var(--cr-text);
-}
-
-.browser-drawer-close {
-  padding: 0.25rem 0.5rem;
-  background: transparent;
-  border: none;
-  color: var(--cr-text-subtle);
-  font-size: 1.25rem;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.browser-drawer-close:hover {
-  color: var(--cr-text);
-}
-
-.browser-drawer-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.5rem;
-  padding: 1rem;
-  overflow-y: auto;
-}
-
-.browser-drawer-actions .cache-badge {
-  margin: 0 0 0.25rem;
-}
-
-.browser-drawer-actions .btn-secondary,
-.browser-drawer-actions .local-comic-open-btn--header {
-  width: 100%;
-  justify-content: center;
-}
-
 .cache-badge {
   font-size: 0.75rem;
   color: var(--cr-muted);
@@ -1464,11 +1311,12 @@ button:disabled {
   }
 }
 
-/** Móvil: barra superior con menú de la app (sin FAB duplicado respecto a la cabecera de la biblioteca). */
+/** Móvil: barra superior con menú global de la app (☰). La biblioteca MEGA ya no duplica otro ☰. */
 .app-shell-mobile-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 0.75rem;
+  column-gap: 0.5rem;
   width: 100%;
   flex-shrink: 0;
   padding: 0.55rem 1rem;
@@ -1487,6 +1335,7 @@ button:disabled {
 }
 
 .app-shell-burger {
+  justify-self: start;
   padding: 0.35rem 0.65rem;
   background: var(--cr-border-strong);
   border-radius: 8px;
@@ -1496,12 +1345,22 @@ button:disabled {
 }
 
 .app-shell-mobile-title {
-  flex: 1;
+  justify-self: center;
   min-width: 0;
-  text-align: left;
+  max-width: 100%;
+  text-align: center;
   font-weight: 600;
   font-size: 1.05rem;
   letter-spacing: -0.02em;
+}
+
+/** Equilibra la columna del ☰ para que el título quede centrado en toda la barra. */
+.app-shell-mobile-bar-spacer {
+  pointer-events: none;
+  visibility: hidden;
+  width: 0;
+  height: 0;
+  overflow: hidden;
 }
 
 .app-shell-main {
@@ -1578,13 +1437,13 @@ button:disabled {
 .app-shell-drawer {
   position: fixed;
   top: 0;
-  right: 0;
+  left: 0;
   bottom: 0;
   width: min(18rem, 88vw);
   z-index: 46;
   background: linear-gradient(180deg, var(--cr-drawer-bg) 0%, var(--cr-bg) 100%);
-  border-left: 1px solid var(--cr-border-muted);
-  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.55);
+  border-right: 1px solid var(--cr-border-muted);
+  box-shadow: 12px 0 40px rgba(0, 0, 0, 0.55);
   display: flex;
   flex-direction: column;
   padding: 0.75rem 0.75rem 1.25rem;
@@ -1593,7 +1452,7 @@ button:disabled {
 
 @keyframes app-shell-drawer-in {
   from {
-    transform: translateX(100%);
+    transform: translateX(-100%);
     opacity: 0.9;
   }
   to {
@@ -1950,20 +1809,6 @@ button:disabled {
 }
 
 /* ——— MEGA raíz: cuadrícula de carpetas ——— */
-.mega-root-hint {
-  font-size: 0.85rem;
-  margin: 0 0 0.85rem;
-  padding: 0 0.25rem;
-}
-
-.mega-files-heading {
-  margin: 1rem 0 0.5rem;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--cr-text-page);
-  padding: 0 0.25rem;
-}
-
 .mega-root-grid {
   list-style: none;
   margin: 0 0 1rem;

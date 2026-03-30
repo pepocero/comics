@@ -7,9 +7,7 @@ import { loadViewerPagesFromMegaCache, type CachedComicMeta } from '../lib/megaC
 import {
   putCachedComic,
   deleteCachedComic,
-  clearAllCachedComics,
   listCachedComicMeta,
-  estimateCacheBytes,
   verifyCachedComicBytes,
 } from '../lib/comicStorage'
 import { megaFileCacheId } from '../lib/megaFileId'
@@ -117,13 +115,11 @@ export function MegaBrowser({
   onOpenComic,
   onOpenLocalComic,
 }: Props) {
-  const [navOpen, setNavOpen] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadingTree, setLoadingTree] = useState(true)
   const [downloadingName, setDownloadingName] = useState<string | null>(null)
   const [openingCacheId, setOpeningCacheId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-  const [cacheBytes, setCacheBytes] = useState<number>(0)
   const [cachedRows, setCachedRows] = useState<CachedComicMeta[]>([])
   const [cachedIdSet, setCachedIdSet] = useState<Set<string>>(() => new Set())
   const [downloadProgress, setDownloadProgress] = useState<{
@@ -144,7 +140,6 @@ export function MegaBrowser({
     void listCachedComicMeta().then((rows) => {
       const sorted = [...rows].sort((a, b) => b.downloadedAt - a.downloadedAt)
       setCachedRows(sorted)
-      setCacheBytes(estimateCacheBytes(rows))
       setCachedIdSet(new Set(rows.map((r) => r.id)))
     })
   }, [])
@@ -174,7 +169,7 @@ export function MegaBrowser({
         if (cancelled) return
         const r = node as MegaFile
         if (!r.directory) {
-          setLoadError('El enlace no apunta a una carpeta.')
+          setLoadError('El enlace no es válido.')
           setLoadingTree(false)
           return
         }
@@ -185,7 +180,7 @@ export function MegaBrowser({
       .catch((err: unknown) => {
         if (cancelled) return
         const msg = err instanceof Error ? err.message : String(err)
-        setLoadError(msg || 'No se pudo cargar la carpeta de MEGA.')
+        setLoadError(msg || 'No se pudo cargar el contenido.')
         setLoadingTree(false)
       })
 
@@ -292,22 +287,10 @@ export function MegaBrowser({
     [cachedRows, onOpenComic, refreshCacheInfo],
   )
 
-  const handleClearCache = useCallback(() => {
-    if (!window.confirm('¿Borrar todos los cómics en caché de este dispositivo?')) {
-      return
-    }
-    void clearAllCachedComics().then(() => {
-      refreshCacheInfo()
-      setToast('Caché vaciada.')
-    })
-  }, [refreshCacheInfo])
-
-  const closeNav = useCallback(() => setNavOpen(false), [])
-
   if (loadingTree) {
     return (
       <div className="panel mega-browser-panel">
-        <p className="muted">Conectando con MEGA…</p>
+        <p className="muted">Conectando…</p>
       </div>
     )
   }
@@ -335,111 +318,12 @@ export function MegaBrowser({
     return null
   }
 
-  const pathLabel = breadcrumbs.map((f) => f.name || '…').join(' / ')
   const atRoot = breadcrumbs.length === 1
   const folderEntries = entries.filter((f) => f.directory)
   const fileEntries = entries.filter((f) => !f.directory)
 
-  const navActions = (
-    <>
-      <span className="cache-badge" title="Espacio usado en caché">
-        Caché: {formatBytes(cacheBytes)}
-      </span>
-      <button
-        type="button"
-        className="btn-secondary"
-        onClick={() => {
-          goUp()
-          closeNav()
-        }}
-        disabled={breadcrumbs.length <= 1}
-      >
-        Subir
-      </button>
-      <button
-        type="button"
-        className="btn-secondary"
-        onClick={() => {
-          handleClearCache()
-          closeNav()
-        }}
-      >
-        Vaciar caché
-      </button>
-      <LocalComicOpenButton
-        variant="header"
-        onOpen={(p) => {
-          closeNav()
-          onOpenLocalComic(p)
-        }}
-        disabled={!!downloadingName || !!openingCacheId}
-      />
-      {onChangeSource ? (
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() => {
-            onChangeSource()
-            closeNav()
-          }}
-        >
-          Cambiar fuente
-        </button>
-      ) : null}
-      <button
-        type="button"
-        className="btn-secondary"
-        onClick={() => {
-          onOpenSettings()
-          closeNav()
-        }}
-      >
-        Ajustes
-      </button>
-    </>
-  )
-
   return (
     <div className="browser">
-      <header className="browser-header">
-        <div className="browser-path" title={pathLabel}>
-          {pathLabel}
-        </div>
-        <button
-          type="button"
-          className="browser-header-menu-btn"
-          onClick={() => setNavOpen(true)}
-          aria-label="Menú de la biblioteca"
-          aria-expanded={navOpen}
-        >
-          ☰
-        </button>
-        <div className="browser-actions browser-actions--desktop">{navActions}</div>
-      </header>
-
-      {navOpen ? (
-        <div
-          className="browser-drawer-backdrop"
-          role="presentation"
-          onClick={closeNav}
-        >
-          <aside
-            className="browser-drawer"
-            role="dialog"
-            aria-label="Menú"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="browser-drawer-head">
-              <strong>Menú</strong>
-              <button type="button" className="browser-drawer-close" onClick={closeNav} aria-label="Cerrar menú">
-                ✕
-              </button>
-            </div>
-            <div className="browser-drawer-actions">{navActions}</div>
-          </aside>
-        </div>
-      ) : null}
-
       {toast ? (
         <div className="toast" role="status">
           {toast}
@@ -450,23 +334,11 @@ export function MegaBrowser({
       ) : null}
 
       {atRoot && folderEntries.length > 0 ? (
-        <p className="mega-root-hint muted">
-          Carpetas en la raíz de esta biblioteca. Pulsa una para ver su contenido como en MEGA. Las
-          portadas opcionales se configuran en <code>public/bibliotecas/</code> (ver{' '}
-          <code>covers.json</code>).
-        </p>
-      ) : null}
-
-      {atRoot && folderEntries.length > 0 ? (
         <MegaRootFolderCards
           folders={folderEntries}
           disabled={!!downloadingName || !!openingCacheId}
           onOpenFolder={enterFolder}
         />
-      ) : null}
-
-      {atRoot && fileEntries.length > 0 ? (
-        <h2 className="mega-files-heading">Archivos en la raíz</h2>
       ) : null}
 
       {breadcrumbs.length > 1 ? (

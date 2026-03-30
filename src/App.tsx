@@ -325,10 +325,9 @@ export default function App() {
         if (!libraryReady) {
           return (
             <div className="panel library-gate">
-              <h1 className="library-gate-title">Biblioteca MEGA</h1>
+              <h1 className="library-gate-title">Biblioteca</h1>
               <p className="lead">
-                Para explorar tu carpeta en la nube, primero elige una fuente en la sección{' '}
-                <strong>Fuentes</strong>.
+                Para continuar, elige una fuente en la sección <strong>Fuentes</strong>.
               </p>
               <button type="button" className="home-cta" onClick={() => setSection('sources')}>
                 Ir a Fuentes

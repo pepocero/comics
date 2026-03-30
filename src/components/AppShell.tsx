@@ -96,7 +96,6 @@ export function AppShell({
       <aside className="app-shell-sidebar app-shell-sidebar--desktop">{navBody}</aside>
 
       <div className="app-shell-mobile-bar">
-        <span className="app-shell-mobile-title">ComicRead</span>
         <button
           type="button"
           className="app-shell-burger"
@@ -106,6 +105,8 @@ export function AppShell({
         >
           ☰
         </button>
+        <span className="app-shell-mobile-title">ComicRead</span>
+        <span className="app-shell-mobile-bar-spacer" aria-hidden="true" />
       </div>
 
       {drawerOpen ? (
