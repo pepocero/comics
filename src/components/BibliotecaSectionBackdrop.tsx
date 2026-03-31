@@ -12,7 +12,7 @@ export type BibliotecaBackdropKey =
  * Ruta bajo `public/` por sección: nombre en `bibliotecas/` o ruta absoluta desde la raíz del sitio.
  */
 const SECTION_BACKDROP_FILE: Record<BibliotecaBackdropKey, string> = {
-  home: '/portadas/portada_generica.png',
+  home: '/fondo_azul.png',
   sources: 'comic (11).jpg',
   favorites: 'comic (13).jpg',
   downloads: 'comic (13).jpg',
