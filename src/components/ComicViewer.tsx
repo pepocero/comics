@@ -464,6 +464,15 @@ export function ComicViewer({
     onPageIndexChange?.(index)
   }, [index, onPageIndexChange])
 
+  /** Evita scroll del documento detrás del visor (iOS/Android: la barra fija y los botones se comportan mejor). */
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [])
+
   useEffect(() => {
     saveImageAdjust(imageAdjust)
   }, [imageAdjust])
@@ -593,7 +602,9 @@ export function ComicViewer({
           ✕
         </button>
         <div className="comic-viewer-title">
-          <strong>{title}</strong>
+          <strong className="comic-viewer-title-text" title={title}>
+            {title}
+          </strong>
           <span className="comic-page-count">
             {index + 1} / {pages.length}
           </span>

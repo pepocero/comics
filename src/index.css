@@ -947,6 +947,13 @@ button:disabled {
   position: fixed;
   inset: 0;
   z-index: 100;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
   background: var(--cr-viewer-bg);
   display: flex;
   flex-direction: column;
@@ -969,8 +976,18 @@ button:disabled {
   background: var(--cr-elevated);
   border-bottom: 1px solid var(--cr-border-strong);
   flex-shrink: 0;
-  position: relative;
-  z-index: 110;
+  position: sticky;
+  top: 0;
+  z-index: 250;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.comic-viewer-bar > .btn-icon {
+  flex-shrink: 0;
 }
 
 .btn-icon {
@@ -981,18 +998,26 @@ button:disabled {
 }
 
 .comic-viewer-title {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
 }
 
-.comic-viewer-title strong {
+.comic-viewer-title-text {
   font-size: 0.85rem;
+  font-weight: 600;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+  min-width: 0;
 }
 
 .comic-page-count {
@@ -1002,6 +1027,8 @@ button:disabled {
 
 .comic-viewer-nav {
   display: flex;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
   gap: 0.25rem;
   align-items: center;
 }
@@ -1330,7 +1357,7 @@ button:disabled {
 
 .comic-page-img {
   max-width: 100%;
-  max-height: calc(100dvh - 5.5rem);
+  max-height: min(calc(100dvh - 7.5rem), calc(100svh - 7.5rem));
   width: auto;
   height: auto;
   object-fit: contain;

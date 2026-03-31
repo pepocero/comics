@@ -62,10 +62,17 @@ function comicreadOgMetaPlugin(siteOrigin: string): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '')
+  /** Solo prefijo VITE_: `''` hace que se mezcle todo `process.env` y no aporta al plugin OG. */
+  const env = loadEnv(mode, process.cwd(), 'VITE_')
   const siteOrigin = (env.VITE_SITE_ORIGIN ?? '').replace(/\/$/, '')
 
   return {
+  clearScreen: false,
+  server: {
+    host: '127.0.0.1',
+    port: 5173,
+    strictPort: false,
+  },
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_ID__: JSON.stringify(__BUILD_ID__),
