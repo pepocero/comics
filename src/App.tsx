@@ -14,6 +14,7 @@ import { DownloadsSection } from './components/DownloadsSection'
 import { HomePage } from './components/HomePage'
 import { SettingsPanel } from './components/SettingsPanel'
 import { SourcePicker } from './components/SourcePicker'
+import { FavoritesSection } from './components/FavoritesSection'
 import { MegaBrowser } from './components/MegaBrowser'
 import { ComicViewer, type ViewerPage } from './components/ComicViewer'
 import type { LocalComicOpenPayload } from './components/LocalComicOpenButton'
@@ -30,6 +31,11 @@ import {
   upsertReadingProgress,
 } from './lib/readingProgress'
 import type { ReadingProgress } from './lib/readingProgress'
+import {
+  getMegaFavorites,
+  removeMegaFavorite,
+  type MegaLibraryNavTarget,
+} from './lib/megaFavorites'
 import {
   deleteCachedComic,
   estimateCacheBytes,
@@ -56,6 +62,8 @@ export default function App() {
   const [homeCacheBytes, setHomeCacheBytes] = useState(0)
   const [homeOpeningId, setHomeOpeningId] = useState<string | null>(null)
   const [homeToast, setHomeToast] = useState<string | null>(null)
+  const [libraryNavTarget, setLibraryNavTarget] = useState<MegaLibraryNavTarget | null>(null)
+  const [favoritesTick, bumpFavorites] = useState(0)
 
   const viewerRef = useRef<ViewerState | null>(null)
   const lastPageIndexRef = useRef(0)
@@ -84,6 +92,10 @@ export default function App() {
   useEffect(() => {
     if (section === 'downloads') refreshHomeDownloads()
   }, [section, refreshHomeDownloads])
+
+  useEffect(() => {
+    if (section !== 'library') setLibraryNavTarget(null)
+  }, [section])
 
   const refresh = useCallback(() => {
     bump((k) => k + 1)
@@ -263,6 +275,22 @@ export default function App() {
 
   const continueHidden = !!viewer
   const readingItems = useMemo(() => getReadingList(), [progressTick])
+  const favoriteItems = useMemo(() => getMegaFavorites(), [favoritesTick])
+
+  const handleGoToLibraryFromFavorite = useCallback((target: MegaLibraryNavTarget) => {
+    setLibraryNavTarget(target)
+    setSection('library')
+  }, [])
+
+  const handleRemoveFavorite = useCallback((fileId: string, displayName: string) => {
+    if (!window.confirm(`¿Quitar «${displayName}» de favoritos?`)) return
+    removeMegaFavorite(fileId)
+    bumpFavorites((k) => k + 1)
+  }, [])
+
+  const consumeLibraryNavTarget = useCallback(() => {
+    setLibraryNavTarget(null)
+  }, [])
 
   const handleNavigate = useCallback((id: ShellNavId) => {
     setSection(id)
@@ -349,6 +377,19 @@ export default function App() {
             }
             onOpenComic={handleOpenComic}
             onOpenLocalComic={handleOpenLocalComic}
+            libraryNavTarget={libraryNavTarget}
+            onLibraryNavTargetConsumed={consumeLibraryNavTarget}
+            onFavoritesChanged={() => bumpFavorites((k) => k + 1)}
+          />
+        )
+      case 'favorites':
+        return (
+          <FavoritesSection
+            items={favoriteItems}
+            currentMegaFolderUrl={megaUrl}
+            libraryReady={libraryReady}
+            onGoToLibrary={handleGoToLibraryFromFavorite}
+            onRemove={handleRemoveFavorite}
           />
         )
       case 'downloads':

@@ -1,5 +1,5 @@
 import { File as MegaFile } from 'megajs'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { parseMegaFolderUrl } from '../lib/parseMegaFolderUrl'
 import { downloadMegaFileToArrayBuffer } from '../lib/megaDownload'
 import { formatBytes } from '../lib/formatBytes'
@@ -10,6 +10,13 @@ import {
   listCachedComicMeta,
   verifyCachedComicBytes,
 } from '../lib/comicStorage'
+import {
+  buildMegaFavoriteRecord,
+  getMegaFavorites,
+  removeMegaFavorite,
+  upsertMegaFavorite,
+  type MegaLibraryNavTarget,
+} from '../lib/megaFavorites'
 import { megaFileCacheId } from '../lib/megaFileId'
 import { isMegaListHiddenFile } from '../lib/megaListHiddenFiles'
 import { isMegaSeparatorPlaceholderFolder } from '../lib/megaPlaceholderFolder'
@@ -25,6 +32,10 @@ type Props = {
   onChangeSource?: () => void
   onOpenComic: (title: string, pages: ViewerPage[], ctx: { megaCacheId: string }) => void
   onOpenLocalComic: (payload: LocalComicOpenPayload) => void
+  /** Navegar a la carpeta de un favorito (se consume al aplicar o fallar). */
+  libraryNavTarget?: MegaLibraryNavTarget | null
+  onLibraryNavTargetConsumed?: () => void
+  onFavoritesChanged?: () => void
 }
 
 function sortEntries(files: MegaFile[]): MegaFile[] {
@@ -37,12 +48,33 @@ function sortEntries(files: MegaFile[]): MegaFile[] {
   })
 }
 
+function visibleSortedEntries(node: MegaFile): MegaFile[] {
+  const entriesRaw = node.directory ? sortEntries(node.children ?? []) : []
+  return entriesRaw.filter(
+    (f) =>
+      !(f.directory && isMegaSeparatorPlaceholderFolder(f.name)) && !isMegaListHiddenFile(f.name),
+  )
+}
+
+function isArchiveFileName(name: string): boolean {
+  const lower = name.toLowerCase()
+  return (
+    lower.endsWith('.cbz') ||
+    lower.endsWith('.zip') ||
+    lower.endsWith('.cbr') ||
+    lower.endsWith('.rar')
+  )
+}
+
 export function MegaBrowser({
   megaFolderUrl,
   onOpenSettings,
   onChangeSource,
   onOpenComic,
   onOpenLocalComic,
+  libraryNavTarget = null,
+  onLibraryNavTargetConsumed,
+  onFavoritesChanged,
 }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadingTree, setLoadingTree] = useState(true)
@@ -55,6 +87,7 @@ export function MegaBrowser({
     name: string
     percent: number
   } | null>(null)
+  const [favBump, setFavBump] = useState(0)
 
   const [root, setRoot] = useState<MegaFile | null>(null)
   const [breadcrumbs, setBreadcrumbs] = useState<MegaFile[]>([])
@@ -64,6 +97,11 @@ export function MegaBrowser({
   const entries = entriesRaw.filter(
     (f) =>
       !(f.directory && isMegaSeparatorPlaceholderFolder(f.name)) && !isMegaListHiddenFile(f.name),
+  )
+
+  const favoriteIdSet = useMemo(
+    () => new Set(getMegaFavorites().map((f) => f.fileId)),
+    [favBump],
   )
 
   const refreshCacheInfo = useCallback(() => {
@@ -119,6 +157,45 @@ export function MegaBrowser({
     }
   }, [megaFolderUrl])
 
+  useEffect(() => {
+    if (!root || loadingTree || loadError) return
+    const target = libraryNavTarget
+    if (!target) return
+    if (target.megaFolderUrl !== megaFolderUrl) {
+      onLibraryNavTargetConsumed?.()
+      return
+    }
+
+    let trail: MegaFile[] = [root]
+    let folder: MegaFile = root
+    for (const label of target.pathLabels) {
+      const kids = visibleSortedEntries(folder).filter((f) => f.directory)
+      const next = kids.find((f) => (f.name || '') === label)
+      if (!next) {
+        setToast('No se encontró la carpeta del favorito. Puede haber cambiado en MEGA.')
+        onLibraryNavTargetConsumed?.()
+        return
+      }
+      trail.push(next)
+      folder = next
+    }
+    setBreadcrumbs(trail)
+
+    const filesHere = visibleSortedEntries(folder).filter((f) => !f.directory)
+    const found = filesHere.some((f) => megaFileCacheId(f) === target.fileId)
+    if (!found) {
+      setToast('El archivo del favorito no aparece en esta carpeta.')
+    }
+    onLibraryNavTargetConsumed?.()
+  }, [
+    root,
+    loadingTree,
+    loadError,
+    libraryNavTarget,
+    megaFolderUrl,
+    onLibraryNavTargetConsumed,
+  ])
+
   const enterFolder = useCallback((folder: MegaFile) => {
     setBreadcrumbs((prev) => [...prev, folder])
   }, [])
@@ -126,6 +203,31 @@ export function MegaBrowser({
   const goUp = useCallback(() => {
     setBreadcrumbs((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev))
   }, [])
+
+  const toggleMegaFavorite = useCallback(
+    (file: MegaFile) => {
+      const name = file.name || '(sin nombre)'
+      if (!isArchiveFileName(name)) return
+      const id = megaFileCacheId(file)
+      const pathLabels = breadcrumbs.slice(1).map((n) => n.name || '')
+      if (favoriteIdSet.has(id)) {
+        removeMegaFavorite(id)
+      } else {
+        upsertMegaFavorite(
+          buildMegaFavoriteRecord({
+            fileId: id,
+            megaFolderUrl,
+            name,
+            size: file.size ?? null,
+            pathLabels,
+          }),
+        )
+      }
+      setFavBump((k) => k + 1)
+      onFavoritesChanged?.()
+    },
+    [breadcrumbs, favoriteIdSet, megaFolderUrl, onFavoritesChanged],
+  )
 
   /** Descarga y guarda en caché; el visor se abre desde Descargas en el menú lateral. */
   const downloadArchiveToCache = useCallback(
@@ -190,7 +292,7 @@ export function MegaBrowser({
         setDownloadingName(null)
       }
     },
-    [cachedIdSet, refreshCacheInfo],
+    [cachedIdSet, onFavoritesChanged, refreshCacheInfo],
   )
 
   const openComicFromCache = useCallback(
@@ -338,44 +440,62 @@ export function MegaBrowser({
             )
           }
 
+          const showFav = isArchiveFileName(label)
+          const isFav = favoriteIdSet.has(cacheId)
+
           return (
             <li key={cacheId}>
-              <button
-                type="button"
-                className="file-row file"
-                title="Descargar a este dispositivo (luego ábrelo aquí o en Descargas)"
-                onClick={() => void downloadArchiveToCache(f)}
-                disabled={!!downloadingName || !!openingCacheId}
-              >
-                <div className="file-row-top">
-                  <span className="file-icon">📄</span>
-                  <span className="file-name">{label}</span>
-                  {f.size != null ? (
-                    <span className="file-size">{formatBytes(f.size)}</span>
-                  ) : null}
-                  {isBusy ? (
-                    <span className="file-busy">Descargando…</span>
-                  ) : null}
-                </div>
-                {showProgress ? (
-                  <div
-                    className="file-download-row"
-                    role="progressbar"
-                    aria-valuenow={downloadProgress.percent}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label={`Descarga ${downloadProgress.percent} por ciento`}
-                  >
-                    <div className="file-download-track">
-                      <div
-                        className="file-download-fill"
-                        style={{ width: `${downloadProgress.percent}%` }}
-                      />
-                    </div>
-                    <span className="file-download-pct">{downloadProgress.percent}%</span>
+              <div className="file-row file file-row--with-fav">
+                <button
+                  type="button"
+                  className="file-row-download"
+                  title="Descargar a este dispositivo (luego ábrelo aquí o en Descargas)"
+                  onClick={() => void downloadArchiveToCache(f)}
+                  disabled={!!downloadingName || !!openingCacheId}
+                >
+                  <div className="file-row-top">
+                    <span className="file-icon">📄</span>
+                    <span className="file-name">{label}</span>
+                    {f.size != null ? (
+                      <span className="file-size">{formatBytes(f.size)}</span>
+                    ) : null}
+                    {isBusy ? (
+                      <span className="file-busy">Descargando…</span>
+                    ) : null}
                   </div>
+                  {showProgress ? (
+                    <div
+                      className="file-download-row"
+                      role="progressbar"
+                      aria-valuenow={downloadProgress.percent}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={`Descarga ${downloadProgress.percent} por ciento`}
+                    >
+                      <div className="file-download-track">
+                        <div
+                          className="file-download-fill"
+                          style={{ width: `${downloadProgress.percent}%` }}
+                        />
+                      </div>
+                      <span className="file-download-pct">{downloadProgress.percent}%</span>
+                    </div>
+                  ) : null}
+                </button>
+                {showFav ? (
+                  <button
+                    type="button"
+                    className="file-fav-btn"
+                    disabled={!!downloadingName || !!openingCacheId}
+                    onClick={() => toggleMegaFavorite(f)}
+                    aria-label={isFav ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+                    aria-pressed={isFav}
+                    title={isFav ? 'Quitar de favoritos' : 'Guardar para descargar después'}
+                  >
+                    {isFav ? '★' : '☆'}
+                  </button>
                 ) : null}
-              </button>
+              </div>
             </li>
           )
         })}

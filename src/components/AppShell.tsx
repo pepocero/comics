@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useState } from 'react'
 
-export type ShellNavId = 'home' | 'sources' | 'library' | 'downloads' | 'continue'
+export type ShellNavId = 'home' | 'sources' | 'library' | 'favorites' | 'downloads' | 'continue'
 
 type NavItem = {
   id: ShellNavId
@@ -23,6 +23,7 @@ const NAV: NavItem[] = [
   { id: 'home', label: 'Inicio' },
   { id: 'sources', label: 'Fuentes' },
   { id: 'library', label: 'Biblioteca MEGA' },
+  { id: 'favorites', label: 'Favoritos' },
   { id: 'downloads', label: 'Descargas' },
   { id: 'continue', label: 'Seguir leyendo' },
 ]

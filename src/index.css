@@ -537,6 +537,65 @@ button:disabled {
   gap: 0.35rem;
 }
 
+.file-row.file.file-row--with-fav {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+}
+
+.file-row-download {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  padding: 0.65rem 1rem;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  border: none;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.file-row-download:hover:not(:disabled) {
+  background: var(--cr-raised);
+}
+
+.file-row-download:disabled {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+.file-fav-btn {
+  flex-shrink: 0;
+  width: 2.75rem;
+  align-self: stretch;
+  border: none;
+  border-left: 1px solid var(--cr-border-strong);
+  background: var(--cr-elevated);
+  color: var(--cr-link);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.file-fav-btn:hover:not(:disabled) {
+  background: var(--cr-border-soft);
+}
+
+.file-fav-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.file-fav-btn[aria-pressed='true'] {
+  color: #e6b422;
+}
+
 .file-row-top {
   display: flex;
   align-items: center;
@@ -547,6 +606,10 @@ button:disabled {
 
 .file-row.file:hover:not(:disabled) {
   background: var(--cr-raised);
+}
+
+.file-row.file.file-row--with-fav:hover {
+  background: transparent;
 }
 
 .file-row.file.file--cached {
@@ -1771,6 +1834,11 @@ button:disabled {
   align-items: center;
   gap: 0.5rem 0.75rem;
   margin-bottom: 0.75rem;
+}
+
+.favorites-wrong-source {
+  color: var(--cr-text-faint);
+  font-style: italic;
 }
 
 .downloads-panel--standalone {

@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useMemo } from 'react'
 export type BibliotecaBackdropKey =
   | 'home'
   | 'sources'
+  | 'favorites'
   | 'downloads'
   | 'continue'
   | 'settings'
@@ -13,6 +14,7 @@ export type BibliotecaBackdropKey =
 const SECTION_BACKDROP_FILE: Record<BibliotecaBackdropKey, string> = {
   home: '/portadas/portada_generica.png',
   sources: 'comic (11).jpg',
+  favorites: 'comic (13).jpg',
   downloads: 'comic (13).jpg',
   continue: 'comic (25).jpg',
   settings: 'comic (30).jpg',
