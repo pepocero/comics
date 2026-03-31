@@ -5,7 +5,7 @@ export const MEGA_FOLDER_GENERIC_COVER = '/portadas/portada_generica.png'
 
 /**
  * Nombre de archivo de carátula (sin extensión), igual al prefijo de la carpeta MEGA:
- * `002.La saga…` → `002`; `00. Origenes` → `00` (tres cifras antes del punto si aplica; si no, dos).
+ * `002.La saga…` → `002`; `01. Alias` → `01` (tres cifras antes del punto si aplica; si no, dos).
  */
 export function extractFolderImageStem(name: string | null | undefined): string | null {
   const n = (name ?? '').trim()
@@ -19,7 +19,7 @@ export function extractFolderImageStem(name: string | null | undefined): string 
 const LOCAL_PORTADA_EXTENSIONS = ['webp', 'jpg', 'jpeg', 'png', 'gif'] as const
 
 /**
- * `slot` 0…3 = `VITE_MEGA_FOLDER_URL_1…4` → `public/portadas/url{slot+1}/`.
+ * `slot` 0…4 = `VITE_MEGA_FOLDER_URL_1…5` → `public/portadas/url{slot+1}/` (p. ej. slot 4 → `url5`).
  */
 export function localPortadaUrlCandidates(
   folderName: string | null | undefined,

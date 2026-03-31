@@ -27,7 +27,7 @@ export function HomePage({ onGoSources, onGoLibrary, libraryReady }: Props) {
             <div>
               <strong>Fuentes</strong>
               <p>
-                Elige la cuenta MEGA configurada en la app (hasta cuatro enlaces en el entorno de
+                Elige la cuenta MEGA configurada en la app (hasta cinco enlaces en el entorno de
                 compilación). Si solo hay una, se usa automáticamente al entrar en la biblioteca.
               </p>
             </div>

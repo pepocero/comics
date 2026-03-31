@@ -317,7 +317,6 @@ export default function App() {
           <SettingsPanel
             onSaved={() => {
               refresh()
-              setShowSettings(false)
             }}
             onCancel={() => setShowSettings(false)}
           />
