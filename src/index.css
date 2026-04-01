@@ -625,6 +625,15 @@ button:disabled {
   cursor: default;
 }
 
+.file-row-cached-inner {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.65rem 1rem;
+}
+
 .file-row-cached-actions {
   display: flex;
   justify-content: flex-end;

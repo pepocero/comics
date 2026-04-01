@@ -414,34 +414,55 @@ export function MegaBrowser({
           const showProgress = isBusy && downloadProgress && downloadProgress.name === label
           const busyOpen = openingCacheId === cacheId
 
+          const showFav = isArchiveFileName(label)
+
           if (isCached) {
+            const isFavCached = favoriteIdSet.has(cacheId)
             return (
               <li key={cacheId}>
-                <div className="file-row file file--cached file-row-cached">
-                  <div className="file-row-top">
-                    <span className="file-icon">📄</span>
-                    <span className="file-name">{label}</span>
-                    {f.size != null ? (
-                      <span className="file-size">{formatBytes(f.size)}</span>
-                    ) : null}
-                    <span className="file-busy file-busy--ok">En el dispositivo</span>
+                <div className="file-row file file--cached file-row-cached file-row--with-fav">
+                  <div className="file-row-cached-inner">
+                    <div className="file-row-top">
+                      <span className="file-icon">📄</span>
+                      <span className="file-name">{label}</span>
+                      {f.size != null ? (
+                        <span className="file-size">{formatBytes(f.size)}</span>
+                      ) : null}
+                      <span className="file-busy file-busy--ok">En el dispositivo</span>
+                    </div>
+                    <div className="file-row-cached-actions">
+                      <button
+                        type="button"
+                        className="downloads-open-btn file-open-cached-btn"
+                        onClick={() => void openComicFromCache(cacheId)}
+                        disabled={!!downloadingName || !!openingCacheId}
+                      >
+                        {busyOpen ? 'Abriendo…' : 'Abrir'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="file-row-cached-actions">
+                  {showFav ? (
                     <button
                       type="button"
-                      className="downloads-open-btn file-open-cached-btn"
-                      onClick={() => void openComicFromCache(cacheId)}
+                      className="file-fav-btn"
                       disabled={!!downloadingName || !!openingCacheId}
+                      onClick={() => toggleMegaFavorite(f)}
+                      aria-label={isFavCached ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+                      aria-pressed={isFavCached}
+                      title={
+                        isFavCached
+                          ? 'Quitar de favoritos'
+                          : 'Guardar en favoritos (también si ya está descargado)'
+                      }
                     >
-                      {busyOpen ? 'Abriendo…' : 'Abrir'}
+                      {isFavCached ? '★' : '☆'}
                     </button>
-                  </div>
+                  ) : null}
                 </div>
               </li>
             )
           }
 
-          const showFav = isArchiveFileName(label)
           const isFav = favoriteIdSet.has(cacheId)
 
           return (
