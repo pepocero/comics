@@ -13,6 +13,7 @@ import {
 import {
   buildMegaFavoriteRecord,
   getMegaFavorites,
+  normalizeMegaFolderUrlForCompare,
   removeMegaFavorite,
   upsertMegaFavorite,
   type MegaLibraryNavTarget,
@@ -161,7 +162,7 @@ export function MegaBrowser({
     if (!root || loadingTree || loadError) return
     const target = libraryNavTarget
     if (!target) return
-    if (target.megaFolderUrl !== megaFolderUrl) {
+    if (normalizeMegaFolderUrlForCompare(target.megaFolderUrl) !== normalizeMegaFolderUrlForCompare(megaFolderUrl)) {
       onLibraryNavTargetConsumed?.()
       return
     }

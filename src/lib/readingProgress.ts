@@ -129,11 +129,20 @@ function persistList(list: ReadingProgress[]): void {
   }
 }
 
-/** Todas las lecturas en curso, más recientes primero. */
+/** Lectura considerada terminada (última página vista). Solo si hay más de una página (evita borrar al abrir un cómic de 1 página). */
+export function isReadingProgressFinished(p: ReadingProgress): boolean {
+  return p.totalPages > 1 && p.pageIndex >= p.totalPages - 1
+}
+
+/** Todas las lecturas en curso, más recientes primero (sin cómics ya terminados). */
 export function getReadingList(): ReadingProgress[] {
   migrateLegacyIfNeeded()
   const list = parseList(localStorage.getItem(LS_KEY_LIST))
-  return [...list].sort((a, b) => b.updatedAt - a.updatedAt)
+  const filtered = list.filter((p) => !isReadingProgressFinished(p))
+  if (filtered.length !== list.length) {
+    persistList(filtered)
+  }
+  return [...filtered].sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
 export function findReadingBySession(session: ViewerSession): ReadingProgress | null {
@@ -145,6 +154,10 @@ export function findReadingBySession(session: ViewerSession): ReadingProgress | 
 
 export function upsertReadingProgress(p: ReadingProgress): void {
   migrateLegacyIfNeeded()
+  if (isReadingProgressFinished(p)) {
+    removeReadingProgress(p)
+    return
+  }
   const list = parseList(localStorage.getItem(LS_KEY_LIST))
   const k = progressKey(p)
   const idx = list.findIndex((x) => progressKey(x) === k)

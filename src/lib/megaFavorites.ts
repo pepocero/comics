@@ -57,13 +57,41 @@ function parseList(json: string | null): MegaFavoriteRecord[] {
   }
 }
 
+/** Misma carpeta MEGA aunque haya espacios al inicio/final al guardar. */
+export function normalizeMegaFolderUrlForCompare(url: string): string {
+  return url.trim()
+}
+
+/**
+ * Misma obra (carpeta raíz + ruta + nombre de archivo): un solo favorito; gana el más reciente.
+ * Evita entradas duplicadas con distinto fileId (p. ej. nodo MEGA distinto) que desincronizan la estrella.
+ */
+function dedupeMegaFavorites(list: MegaFavoriteRecord[]): MegaFavoriteRecord[] {
+  const map = new Map<string, MegaFavoriteRecord>()
+  for (const r of list) {
+    const url = normalizeMegaFolderUrlForCompare(r.megaFolderUrl)
+    const key = `${url}\0${r.pathLabels.join('\0')}\0${r.name}`
+    const next: MegaFavoriteRecord = { ...r, megaFolderUrl: url }
+    const prev = map.get(key)
+    if (!prev || next.addedAt >= prev.addedAt) {
+      map.set(key, next)
+    }
+  }
+  return Array.from(map.values())
+}
+
 function persist(list: MegaFavoriteRecord[]): void {
   const trimmed = list.slice(0, MAX_ITEMS)
   localStorage.setItem(LS_KEY, JSON.stringify(trimmed))
 }
 
 export function getMegaFavorites(): MegaFavoriteRecord[] {
-  return parseList(localStorage.getItem(LS_KEY))
+  const raw = parseList(localStorage.getItem(LS_KEY))
+  const merged = dedupeMegaFavorites(raw)
+  if (JSON.stringify(raw) !== JSON.stringify(merged)) {
+    persist(merged)
+  }
+  return merged
 }
 
 export function isMegaFavoriteFileId(fileId: string): boolean {
@@ -71,13 +99,19 @@ export function isMegaFavoriteFileId(fileId: string): boolean {
 }
 
 export function upsertMegaFavorite(rec: MegaFavoriteRecord): void {
-  const cur = getMegaFavorites().filter((f) => f.fileId !== rec.fileId)
-  cur.unshift(rec)
-  persist(cur)
+  const normalized: MegaFavoriteRecord = {
+    ...rec,
+    megaFolderUrl: normalizeMegaFolderUrlForCompare(rec.megaFolderUrl),
+  }
+  const raw = parseList(localStorage.getItem(LS_KEY))
+  const withoutId = raw.filter((f) => f.fileId !== normalized.fileId)
+  const merged = dedupeMegaFavorites([normalized, ...withoutId])
+  persist(merged)
 }
 
 export function removeMegaFavorite(fileId: string): void {
-  persist(getMegaFavorites().filter((f) => f.fileId !== fileId))
+  const raw = parseList(localStorage.getItem(LS_KEY))
+  persist(raw.filter((f) => f.fileId !== fileId))
 }
 
 export function buildMegaFavoriteRecord(input: {

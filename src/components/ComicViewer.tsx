@@ -100,7 +100,38 @@ function ComicPageCanvas({
     panRef.current = { x: panX, y: panY }
   }, [panX, panY])
 
+  const scaleRef = useRef(scale)
+  useEffect(() => {
+    scaleRef.current = scale
+  }, [scale])
+
+  /** Un solo requestAnimationFrame por gesto táctil: menos tirones al redibujar. */
+  const touchPanRafRef = useRef<number | null>(null)
+  const pendingTouchPanRef = useRef<{ x: number; y: number } | null>(null)
+
+  const flushTouchPanImmediate = useCallback(() => {
+    if (touchPanRafRef.current !== null) {
+      cancelAnimationFrame(touchPanRafRef.current)
+      touchPanRafRef.current = null
+    }
+    const pend = pendingTouchPanRef.current
+    if (pend) {
+      setPanX(pend.x)
+      setPanY(pend.y)
+      pendingTouchPanRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (touchPanRafRef.current !== null) {
+        cancelAnimationFrame(touchPanRafRef.current)
+      }
+    }
+  }, [])
+
   const clearInteractionState = useCallback(() => {
+    flushTouchPanImmediate()
     pointerDragCleanupRef.current?.()
     pointerDragCleanupRef.current = null
     const d = dragRef.current
@@ -118,7 +149,7 @@ function ComicPageCanvas({
     touchPanRef.current = null
     pinchRef.current = null
     setDragging(false)
-  }, [])
+  }, [flushTouchPanImmediate])
 
   const resetView = useCallback(() => {
     clearInteractionState()
@@ -261,22 +292,108 @@ function ComicPageCanvas({
     window.addEventListener('pointercancel', up, true)
   }, [])
 
-  const onTouchStart = useCallback(
-    (e: React.TouchEvent) => {
-      if (e.touches.length === 2) {
-        touchPanRef.current = null
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      flushTouchPanImmediate()
+      touchPanRef.current = null
+      const [a, b] = [e.touches[0], e.touches[1]]
+      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
+      const p = panRef.current
+      pinchRef.current = {
+        dist,
+        scale: scaleRef.current,
+        panX: p.x,
+        panY: p.y,
+      }
+      dragRef.current = null
+      setDragging(false)
+      return
+    }
+    if (e.touches.length === 1) {
+      const t = e.touches[0]
+      const p = panRef.current
+      touchPanRef.current = {
+        startX: t.clientX,
+        startY: t.clientY,
+        panStartX: p.x,
+        panStartY: p.y,
+      }
+    }
+  }, [flushTouchPanImmediate])
+
+  const onTouchMoveNative = useCallback(
+    (e: TouchEvent) => {
+      if (e.touches.length === 2 && pinchRef.current) {
+        if (touchPanRafRef.current !== null) {
+          cancelAnimationFrame(touchPanRafRef.current)
+          touchPanRafRef.current = null
+        }
+        pendingTouchPanRef.current = null
+        e.preventDefault()
         const [a, b] = [e.touches[0], e.touches[1]]
         const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
-        pinchRef.current = {
-          dist,
-          scale,
-          panX,
-          panY,
-        }
-        dragRef.current = null
-        setDragging(false)
+        const p = pinchRef.current
+        const ratio = dist / Math.max(p.dist, 1e-6)
+        const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, p.scale * ratio))
+        const stage = stageRef.current
+        if (!stage) return
+        const rect = stage.getBoundingClientRect()
+        const mx = (a.clientX + b.clientX) / 2 - rect.left
+        const my = (a.clientY + b.clientY) / 2 - rect.top
+        const rcx = rect.width / 2
+        const rcy = rect.height / 2
+        const scaleRatio = newScale / p.scale
+        setScale(newScale)
+        setPanX(p.panX + (mx - rcx) * (1 - scaleRatio))
+        setPanY(p.panY + (my - rcy) * (1 - scaleRatio))
+        dblStepRef.current = 0
         return
       }
+
+      if (e.touches.length === 1 && touchPanRef.current) {
+        e.preventDefault()
+        const t = e.touches[0]
+        const p = touchPanRef.current
+        const nx = p.panStartX + (t.clientX - p.startX)
+        const ny = p.panStartY + (t.clientY - p.startY)
+        pendingTouchPanRef.current = { x: nx, y: ny }
+        if (touchPanRafRef.current === null) {
+          touchPanRafRef.current = requestAnimationFrame(() => {
+            touchPanRafRef.current = null
+            const pend = pendingTouchPanRef.current
+            if (pend) {
+              setPanX(pend.x)
+              setPanY(pend.y)
+            }
+          })
+        }
+      }
+    },
+    [],
+  )
+
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!stage) return
+    const fn = (e: TouchEvent) => onTouchMoveNative(e)
+    stage.addEventListener('touchmove', fn, { passive: false })
+    return () => stage.removeEventListener('touchmove', fn)
+  }, [onTouchMoveNative])
+
+  const onTouchEndPan = useCallback(
+    (e: React.TouchEvent) => {
+      flushTouchPanImmediate()
+
+      if (e.touches.length < 2) {
+        pinchRef.current = null
+      }
+
+      if (e.touches.length === 0) {
+        touchPanRef.current = null
+        return
+      }
+
+      /* Tras soltar un dedo del pinch, el dedo que sigue apoyado debe poder arrastrar sin levantar. */
       if (e.touches.length === 1) {
         const t = e.touches[0]
         const p = panRef.current
@@ -288,59 +405,14 @@ function ComicPageCanvas({
         }
       }
     },
-    [scale],
+    [flushTouchPanImmediate],
   )
 
-  const onTouchMoveNative = useCallback((e: TouchEvent) => {
-    if (e.touches.length === 2 && pinchRef.current) {
-      e.preventDefault()
-      const [a, b] = [e.touches[0], e.touches[1]]
-      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
-      const p = pinchRef.current
-      const ratio = dist / Math.max(p.dist, 1e-6)
-      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, p.scale * ratio))
-      const stage = stageRef.current
-      if (!stage) return
-      const rect = stage.getBoundingClientRect()
-      const mx = (a.clientX + b.clientX) / 2 - rect.left
-      const my = (a.clientY + b.clientY) / 2 - rect.top
-      const rcx = rect.width / 2
-      const rcy = rect.height / 2
-      const scaleRatio = newScale / p.scale
-      setScale(newScale)
-      setPanX(p.panX + (mx - rcx) * (1 - scaleRatio))
-      setPanY(p.panY + (my - rcy) * (1 - scaleRatio))
-      dblStepRef.current = 0
-      return
-    }
-
-    if (e.touches.length === 1 && touchPanRef.current) {
-      e.preventDefault()
-      const t = e.touches[0]
-      const p = touchPanRef.current
-      const dx = t.clientX - p.startX
-      const dy = t.clientY - p.startY
-      setPanX(p.panStartX + dx)
-      setPanY(p.panStartY + dy)
-    }
-  }, [])
-
-  useEffect(() => {
-    const stage = stageRef.current
-    if (!stage) return
-    const fn = (e: TouchEvent) => onTouchMoveNative(e)
-    stage.addEventListener('touchmove', fn, { passive: false })
-    return () => stage.removeEventListener('touchmove', fn)
-  }, [onTouchMoveNative])
-
-  const onTouchEndPan = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 0) {
-      touchPanRef.current = null
-    }
-    if (e.touches.length < 2) {
-      pinchRef.current = null
-    }
-  }, [])
+  const onTouchCancel = useCallback(() => {
+    flushTouchPanImmediate()
+    touchPanRef.current = null
+    pinchRef.current = null
+  }, [flushTouchPanImmediate])
 
   const onTouchEnd = useCallback(
     (e: React.TouchEvent) => {
@@ -408,6 +480,7 @@ function ComicPageCanvas({
         onPointerDown={onPointerDown}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchCancel}
       >
         <div
           ref={innerRef}

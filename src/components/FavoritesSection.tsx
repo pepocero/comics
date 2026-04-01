@@ -1,5 +1,9 @@
 import { formatBytes } from '../lib/formatBytes'
-import type { MegaFavoriteRecord, MegaLibraryNavTarget } from '../lib/megaFavorites'
+import {
+  normalizeMegaFolderUrlForCompare,
+  type MegaFavoriteRecord,
+  type MegaLibraryNavTarget,
+} from '../lib/megaFavorites'
 
 type Props = {
   items: MegaFavoriteRecord[]
@@ -35,7 +39,9 @@ export function FavoritesSection({
           <ul className="downloads-list">
             {sorted.map((row) => {
               const title = row.name.replace(/\.[^.]+$/, '') || row.name
-              const sourceOk = row.megaFolderUrl === currentMegaFolderUrl
+              const sourceOk =
+                normalizeMegaFolderUrlForCompare(row.megaFolderUrl) ===
+                normalizeMegaFolderUrlForCompare(currentMegaFolderUrl)
               const canGo = libraryReady && sourceOk
               return (
                 <li key={row.fileId} className="downloads-row">
