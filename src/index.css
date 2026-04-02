@@ -1050,6 +1050,14 @@ button:disabled {
   background: var(--cr-border-strong);
 }
 
+.comic-reset-view-trigger {
+  padding: 0.4rem 0.55rem;
+  min-width: 2.5rem;
+  font-size: 1.15rem;
+  line-height: 1;
+  background: var(--cr-border-strong);
+}
+
 .comic-pages-trigger--open {
   background: var(--cr-pages-open-bg);
 }
@@ -1317,6 +1325,11 @@ button:disabled {
 
 .comic-edge-next {
   right: 0;
+}
+
+/* Con zoom, el stage debe recibir el arrastre en todo el lienzo; si no, las zonas laterales roban los eventos. */
+.comic-edge-nav--pass-through {
+  pointer-events: none;
 }
 
 .comic-zoom-readout {

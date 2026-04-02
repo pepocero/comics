@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -29,10 +30,17 @@ type Props = {
   onPageIndexChange?: (pageIndex: number) => void
 }
 
-const PRESET_ZOOM_1 = 1.75
-const PRESET_ZOOM_2 = 2.5
+const PRESET_ZOOM_1 = 1.6
+const PRESET_ZOOM_2 = 2.1
 const MIN_SCALE = 0.25
 const MAX_SCALE = 8
+
+/** Un solo estado para zoom+pan evita carreras ref/React (rueda vs layout vs arrastre). */
+type ViewPanZoom = {
+  scale: number
+  panX: number
+  panY: number
+}
 
 type CanvasProps = {
   page: ViewerPage
@@ -53,9 +61,7 @@ function ComicPageCanvas({
   canNext,
   imageFilter,
 }: CanvasProps) {
-  const [scale, setScale] = useState(1)
-  const [panX, setPanX] = useState(0)
-  const [panY, setPanY] = useState(0)
+  const [view, setView] = useState<ViewPanZoom>({ scale: 1, panX: 0, panY: 0 })
   const [originX, setOriginX] = useState(50)
   const [originY, setOriginY] = useState(50)
 
@@ -94,53 +100,51 @@ function ComicPageCanvas({
   /** Quita listeners globales de arrastre (ratón/lápiz); evita estado colgado con setPointerCapture. */
   const pointerDragCleanupRef = useRef<(() => void) | null>(null)
 
-  /** Siempre la última pan (evita arrastre con pan obsoleto tras zoom con rueda). */
+  /** Refs de lectura para gestos; sincronizados desde `view` (una sola fuente de verdad). */
   const panRef = useRef({ x: 0, y: 0 })
-  useEffect(() => {
-    panRef.current = { x: panX, y: panY }
-  }, [panX, panY])
+  const scaleRef = useRef(1)
+  useLayoutEffect(() => {
+    panRef.current = { x: view.panX, y: view.panY }
+    scaleRef.current = view.scale
+  }, [view])
 
-  const scaleRef = useRef(scale)
-  useEffect(() => {
-    scaleRef.current = scale
-  }, [scale])
-
-  /** Misma posición que el estado React (los gestos leen panRef en el mismo tick que setPan). */
-  const syncPanRef = useCallback((x: number, y: number) => {
-    panRef.current = { x, y }
-  }, [])
-
-  const clearInteractionState = useCallback(() => {
-    pointerDragCleanupRef.current?.()
-    pointerDragCleanupRef.current = null
-    const d = dragRef.current
+  /** Libera cualquier captura en el stage (incl. huérfana: dragRef ya null pero el puntero sigue capturado). */
+  const releaseAllPointerCaptureOnStage = useCallback(() => {
     const stage = stageRef.current
-    if (d && stage) {
+    if (!stage) return
+    for (let pid = 0; pid <= 32; pid++) {
       try {
-        if (stage.hasPointerCapture(d.pointerId)) {
-          stage.releasePointerCapture(d.pointerId)
+        if (stage.hasPointerCapture(pid)) {
+          stage.releasePointerCapture(pid)
         }
       } catch {
         /* ignore */
       }
     }
+  }, [])
+
+  /** Solo el arrastre con puntero (ratón/lápiz/táctil); no borra pinch ni touchPan legacy. */
+  const releasePointerDragOnly = useCallback(() => {
+    pointerDragCleanupRef.current?.()
+    pointerDragCleanupRef.current = null
+    releaseAllPointerCaptureOnStage()
     dragRef.current = null
+    setDragging(false)
+  }, [releaseAllPointerCaptureOnStage])
+
+  const clearInteractionState = useCallback(() => {
+    releasePointerDragOnly()
     touchPanRef.current = null
     pinchRef.current = null
-    setDragging(false)
-  }, [])
+  }, [releasePointerDragOnly])
 
   const resetView = useCallback(() => {
     clearInteractionState()
-    setScale(1)
-    setPanX(0)
-    setPanY(0)
-    syncPanRef(0, 0)
-    scaleRef.current = 1
+    setView({ scale: 1, panX: 0, panY: 0 })
     setOriginX(50)
     setOriginY(50)
     dblStepRef.current = 0
-  }, [clearInteractionState, syncPanRef])
+  }, [clearInteractionState])
 
   const applyDoubleZoomAt = useCallback(
     (clientX: number, clientY: number) => {
@@ -165,14 +169,10 @@ function ComicPageCanvas({
 
       setOriginX(ox)
       setOriginY(oy)
-      setPanX(0)
-      setPanY(0)
       const z = next === 1 ? PRESET_ZOOM_1 : PRESET_ZOOM_2
-      setScale(z)
-      syncPanRef(0, 0)
-      scaleRef.current = z
+      setView({ scale: z, panX: 0, panY: 0 })
     },
-    [clearInteractionState, resetView, syncPanRef],
+    [clearInteractionState, resetView],
   )
 
   /** detail === 2: segundo click del par; ocurre tras los pointerup, más fiable que dblclick */
@@ -207,12 +207,16 @@ function ComicPageCanvas({
       const zoomIntensity = 0.0012
       const factor = Math.exp(-delta * zoomIntensity)
 
-      setScale((prev) => {
-        const next = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prev * factor))
-        const ratio = next / prev
-        setPanX((px) => px + (mx - cx) * (1 - ratio))
-        setPanY((py) => py + (my - cy) * (1 - ratio))
-        return next
+      /* Un único setState atómico: el zoom con rueda no compite con useLayoutEffect ni con refs. */
+      setView((v) => {
+        const prevScale = Math.max(v.scale, MIN_SCALE)
+        const nextScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prevScale * factor))
+        const ratio = nextScale / prevScale
+        return {
+          scale: nextScale,
+          panX: v.panX + (mx - cx) * (1 - ratio),
+          panY: v.panY + (my - cy) * (1 - ratio),
+        }
       })
       dblStepRef.current = 0
     }
@@ -220,92 +224,98 @@ function ComicPageCanvas({
     return () => body.removeEventListener('wheel', fn)
   }, [bodyRef, clearInteractionState])
 
-  const onPointerDown = useCallback((e: React.PointerEvent) => {
-    if (e.pointerType === 'touch') return
-    if (e.button !== 0) return
-    if (e.pointerType === 'mouse' || e.pointerType === 'pen') {
-      pinchRef.current = null
-    } else if (pinchRef.current) {
-      return
-    }
-
-    pointerDragCleanupRef.current?.()
-    pointerDragCleanupRef.current = null
-    dragRef.current = null
-    setDragging(false)
-
-    const pid = e.pointerId
-    const p = panRef.current
-    dragRef.current = {
-      active: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      panStartX: p.x,
-      panStartY: p.y,
-      pointerId: pid,
-    }
-    setDragging(true)
-
-    function move(ev: PointerEvent): void {
-      if (ev.pointerId !== pid) return
-      const d = dragRef.current
-      if (!d?.active) return
-      const dx = ev.clientX - d.startX
-      const dy = ev.clientY - d.startY
-      const nx = d.panStartX + dx
-      const ny = d.panStartY + dy
-      setPanX(nx)
-      setPanY(ny)
-      panRef.current = { x: nx, y: ny }
-    }
-
-    function cleanup(): void {
-      window.removeEventListener('pointermove', move, true)
-      window.removeEventListener('pointerup', up, true)
-      window.removeEventListener('pointercancel', up, true)
-    }
-
-    function up(ev: PointerEvent): void {
-      if (ev.pointerId !== pid) return
-      cleanup()
-      pointerDragCleanupRef.current = null
-      dragRef.current = null
-      setDragging(false)
-    }
-
-    pointerDragCleanupRef.current = cleanup
-    window.addEventListener('pointermove', move, true)
-    window.addEventListener('pointerup', up, true)
-    window.addEventListener('pointercancel', up, true)
-  }, [])
-
-  const onTouchStart = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      touchPanRef.current = null
-      const [a, b] = [e.touches[0], e.touches[1]]
-      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
-      const p = panRef.current
-      pinchRef.current = {
-        dist,
-        scale: scaleRef.current,
-        panX: p.x,
-        panY: p.y,
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.button !== 0) return
+      if (e.pointerType === 'mouse' || e.pointerType === 'pen') {
+        pinchRef.current = null
+      } else if (pinchRef.current) {
+        return
       }
-      dragRef.current = null
-      setDragging(false)
-      return
-    }
-    if (e.touches.length === 1) {
-      const t = e.touches[0]
+
+      releasePointerDragOnly()
+
+      const pid = e.pointerId
       const p = panRef.current
-      touchPanRef.current = {
-        startX: t.clientX,
-        startY: t.clientY,
+      dragRef.current = {
+        active: true,
+        startX: e.clientX,
+        startY: e.clientY,
         panStartX: p.x,
         panStartY: p.y,
+        pointerId: pid,
       }
-    }
-  }, [])
+      setDragging(true)
+
+      const stage = stageRef.current
+      if (stage) {
+        try {
+          stage.setPointerCapture(pid)
+        } catch {
+          /* ignore */
+        }
+      }
+
+      function move(ev: PointerEvent): void {
+        if (ev.pointerId !== pid) return
+        const d = dragRef.current
+        if (!d?.active) return
+        const dx = ev.clientX - d.startX
+        const dy = ev.clientY - d.startY
+        const nx = d.panStartX + dx
+        const ny = d.panStartY + dy
+        setView((v) => ({ ...v, panX: nx, panY: ny }))
+      }
+
+      function cleanupListeners(): void {
+        window.removeEventListener('pointermove', move, true)
+        window.removeEventListener('pointerup', up, true)
+        window.removeEventListener('pointercancel', up, true)
+      }
+
+      function up(ev: PointerEvent): void {
+        if (ev.pointerId !== pid) return
+        releasePointerDragOnly()
+      }
+
+      pointerDragCleanupRef.current = cleanupListeners
+      window.addEventListener('pointermove', move, true)
+      window.addEventListener('pointerup', up, true)
+      window.addEventListener('pointercancel', up, true)
+    },
+    [releasePointerDragOnly],
+  )
+
+  const onTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (e.touches.length === 2) {
+        touchPanRef.current = null
+        releasePointerDragOnly()
+        const [a, b] = [e.touches[0], e.touches[1]]
+        const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)
+        const p = panRef.current
+        pinchRef.current = {
+          dist,
+          scale: scaleRef.current,
+          panX: p.x,
+          panY: p.y,
+        }
+        return
+      }
+      /* Con Pointer Events el pan de un dedo va por onPointerDown; duplicar aquí movería el doble. */
+      if (e.touches.length === 1 && typeof window !== 'undefined' && !window.PointerEvent) {
+        const t = e.touches[0]
+        const p = panRef.current
+        touchPanRef.current = {
+          startX: t.clientX,
+          startY: t.clientY,
+          panStartX: p.x,
+          panStartY: p.y,
+        }
+      }
+    },
+    [releasePointerDragOnly],
+  )
 
   const onTouchMoveNative = useCallback((e: TouchEvent) => {
     if (e.touches.length === 2 && pinchRef.current) {
@@ -325,11 +335,7 @@ function ComicPageCanvas({
       const scaleRatio = newScale / p.scale
       const nextPanX = p.panX + (mx - rcx) * (1 - scaleRatio)
       const nextPanY = p.panY + (my - rcy) * (1 - scaleRatio)
-      setScale(newScale)
-      scaleRef.current = newScale
-      setPanX(nextPanX)
-      setPanY(nextPanY)
-      panRef.current = { x: nextPanX, y: nextPanY }
+      setView({ scale: newScale, panX: nextPanX, panY: nextPanY })
       dblStepRef.current = 0
       return
     }
@@ -340,9 +346,7 @@ function ComicPageCanvas({
       const p = touchPanRef.current
       const nx = p.panStartX + (t.clientX - p.startX)
       const ny = p.panStartY + (t.clientY - p.startY)
-      setPanX(nx)
-      setPanY(ny)
-      panRef.current = { x: nx, y: ny }
+      setView((v) => ({ ...v, panX: nx, panY: ny }))
     }
   }, [])
 
@@ -428,14 +432,14 @@ function ComicPageCanvas({
     <>
       <button
         type="button"
-        className="comic-edge-nav comic-edge-prev"
+        className={`comic-edge-nav comic-edge-prev${view.scale !== 1 ? ' comic-edge-nav--pass-through' : ''}`}
         onClick={onPrev}
         disabled={!canPrev}
         aria-label="Página anterior"
       />
       <button
         type="button"
-        className="comic-edge-nav comic-edge-next"
+        className={`comic-edge-nav comic-edge-next${view.scale !== 1 ? ' comic-edge-nav--pass-through' : ''}`}
         onClick={onNext}
         disabled={!canNext}
         aria-label="Página siguiente"
@@ -454,7 +458,7 @@ function ComicPageCanvas({
           ref={innerRef}
           className="comic-zoom-inner"
           style={{
-            transform: `translate(${panX}px, ${panY}px) scale(${scale})`,
+            transform: `translate(${view.panX}px, ${view.panY}px) scale(${view.scale})`,
             transformOrigin: `${originX}% ${originY}%`,
             filter: imageFilter,
           }}
@@ -470,9 +474,9 @@ function ComicPageCanvas({
         </div>
       </div>
 
-      {scale !== 1 ? (
+      {view.scale !== 1 ? (
         <span className="comic-zoom-readout" aria-live="polite">
-          {Math.round(scale * 100)}%
+          {Math.round(view.scale * 100)}%
         </span>
       ) : null}
     </>
@@ -498,6 +502,8 @@ export function ComicViewer({
   const [pagesPanelOpen, setPagesPanelOpen] = useState(false)
   const adjustWrapRef = useRef<HTMLDivElement>(null)
   const activePageItemRef = useRef<HTMLLIElement | null>(null)
+  /** Incrementar fuerza remount del lienzo (misma página); limpia gestos/capturas como al cambiar de página. */
+  const [canvasRemountTick, setCanvasRemountTick] = useState(0)
 
   const imageFilter = useMemo(() => buildImageFilterCss(imageAdjust), [imageAdjust])
 
@@ -660,6 +666,15 @@ export function ComicViewer({
             title="Lista de páginas: abrir o cerrar"
           >
             📑
+          </button>
+          <button
+            type="button"
+            className="comic-reset-view-trigger"
+            onClick={() => setCanvasRemountTick((t) => t + 1)}
+            title="Reiniciar vista y gestos de la página (zoom, desplazamiento). Útil si el arrastre deja de responder."
+            aria-label="Reiniciar vista y gestos del lienzo"
+          >
+            ⟲
           </button>
           <div className="comic-adjust-wrap" ref={adjustWrapRef}>
             <button
@@ -852,7 +867,7 @@ export function ComicViewer({
 
       <div ref={bodyRef} className="comic-viewer-body">
         <ComicPageCanvas
-          key={index}
+          key={`${index}-${canvasRemountTick}`}
           page={page}
           bodyRef={bodyRef}
           onPrev={goPrev}
