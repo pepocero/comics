@@ -932,6 +932,23 @@ button:disabled {
   color: var(--cr-text-page);
 }
 
+.pwa-update-reload-btn {
+  margin-top: 1rem;
+  width: 100%;
+  padding: 0.55rem 0.85rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid var(--cr-link);
+  background: var(--cr-link);
+  color: #fff;
+}
+
+.pwa-update-reload-btn:hover {
+  filter: brightness(1.08);
+}
+
 .toast {
   margin: 0 1rem 0.5rem;
   padding: 0.6rem 0.85rem;

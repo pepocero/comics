@@ -194,7 +194,19 @@ function ComicPageCanvas({
       const stage = stageRef.current
       if (!stage) return
 
-      // Cortar arrastre a medio gesto: el zoom cambia pan/escala y el drag guardaba pan antiguo.
+      /* Ruido de rueda (delta 0): no tocar el estado ni el arrastre activo. */
+      if (e.deltaY === 0 && e.deltaX === 0) {
+        return
+      }
+
+      /*
+       * Mientras se arrastra, no aplicar zoom ni clearInteractionState: quitar los listeners
+       * de pointermove/up deja el ratón “colgado” (sin pointerup limpio) y Brave/Chrome dejan de panear.
+       */
+      if (dragRef.current?.active) {
+        return
+      }
+
       clearInteractionState()
 
       const rect = stage.getBoundingClientRect()
@@ -233,6 +245,9 @@ function ComicPageCanvas({
         return
       }
 
+      const stage = stageRef.current
+      if (!stage) return
+
       releasePointerDragOnly()
 
       const pid = e.pointerId
@@ -247,13 +262,10 @@ function ComicPageCanvas({
       }
       setDragging(true)
 
-      const stage = stageRef.current
-      if (stage) {
-        try {
-          stage.setPointerCapture(pid)
-        } catch {
-          /* ignore */
-        }
+      try {
+        stage.setPointerCapture(pid)
+      } catch {
+        /* ignore */
       }
 
       function move(ev: PointerEvent): void {
@@ -268,9 +280,10 @@ function ComicPageCanvas({
       }
 
       function cleanupListeners(): void {
-        window.removeEventListener('pointermove', move, true)
-        window.removeEventListener('pointerup', up, true)
-        window.removeEventListener('pointercancel', up, true)
+        if (!stage) return
+        stage.removeEventListener('pointermove', move)
+        stage.removeEventListener('pointerup', up)
+        stage.removeEventListener('pointercancel', up)
       }
 
       function up(ev: PointerEvent): void {
@@ -279,9 +292,18 @@ function ComicPageCanvas({
       }
 
       pointerDragCleanupRef.current = cleanupListeners
-      window.addEventListener('pointermove', move, true)
-      window.addEventListener('pointerup', up, true)
-      window.addEventListener('pointercancel', up, true)
+      /* Con setPointerCapture en el stage, los eventos van al stage; más fiable que window en Chrome/Brave. */
+      stage.addEventListener('pointermove', move)
+      stage.addEventListener('pointerup', up)
+      stage.addEventListener('pointercancel', up)
+    },
+    [releasePointerDragOnly],
+  )
+
+  const onStageLostPointerCapture = useCallback(
+    (e: React.PointerEvent) => {
+      if (dragRef.current?.pointerId !== e.pointerId) return
+      releasePointerDragOnly()
     },
     [releasePointerDragOnly],
   )
@@ -450,6 +472,7 @@ function ComicPageCanvas({
         className={`comic-viewer-stage${dragging ? ' comic-viewer-stage--dragging' : ''}`}
         onClick={onStageClick}
         onPointerDown={onPointerDown}
+        onLostPointerCapture={onStageLostPointerCapture}
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         onTouchCancel={onTouchCancel}
