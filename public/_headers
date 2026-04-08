@@ -1,10 +1,13 @@
 # Cloudflare Pages: el service worker y el HTML deben revalidarse siempre;
 # si no, la PWA móvil sigue con un SW antiguo tras un despliegue.
+/ 
+  Cache-Control: no-cache, no-store, must-revalidate
+
 /sw.js
   Cache-Control: no-cache, no-store, must-revalidate
 
 /index.html
-  Cache-Control: no-cache, must-revalidate
+  Cache-Control: no-cache, no-store, must-revalidate
 
 /manifest.webmanifest
   Cache-Control: no-cache, must-revalidate
