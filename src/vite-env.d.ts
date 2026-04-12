@@ -12,11 +12,13 @@ interface ImportMetaEnv {
   readonly VITE_MEGA_FOLDER_URL_3?: string
   readonly VITE_MEGA_FOLDER_URL_4?: string
   readonly VITE_MEGA_FOLDER_URL_5?: string
+  readonly VITE_MEGA_FOLDER_URL_6?: string
   readonly VITE_MEGA_SOURCE_LABEL_1?: string
   readonly VITE_MEGA_SOURCE_LABEL_2?: string
   readonly VITE_MEGA_SOURCE_LABEL_3?: string
   readonly VITE_MEGA_SOURCE_LABEL_4?: string
   readonly VITE_MEGA_SOURCE_LABEL_5?: string
+  readonly VITE_MEGA_SOURCE_LABEL_6?: string
 }
 
 interface ImportMeta {

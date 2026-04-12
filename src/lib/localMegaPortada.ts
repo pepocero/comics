@@ -19,7 +19,7 @@ export function extractFolderImageStem(name: string | null | undefined): string 
 const LOCAL_PORTADA_EXTENSIONS = ['webp', 'jpg', 'jpeg', 'png', 'gif'] as const
 
 /**
- * `slot` 0…4 = `VITE_MEGA_FOLDER_URL_1…5` → `public/portadas/url{slot+1}/` (p. ej. slot 4 → `url5`).
+ * `slot` 0…5 = `VITE_MEGA_FOLDER_URL_1…6` → `public/portadas/url{slot+1}/` (p. ej. slot 5 → `url6`).
  */
 export function localPortadaUrlCandidates(
   folderName: string | null | undefined,

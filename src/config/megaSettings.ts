@@ -1,5 +1,5 @@
-/** Slot 0…4 → VITE_MEGA_FOLDER_URL_1 … _5 */
-export type MegaSourceSlot = 0 | 1 | 2 | 3 | 4
+/** Slot 0…5 → VITE_MEGA_FOLDER_URL_1 … _6 */
+export type MegaSourceSlot = 0 | 1 | 2 | 3 | 4 | 5
 
 export type MegaSource = {
   slot: MegaSourceSlot
@@ -45,7 +45,8 @@ function envUrl(slot: MegaSourceSlot): string {
   if (slot === 1) return (import.meta.env.VITE_MEGA_FOLDER_URL_2 ?? '').trim()
   if (slot === 2) return (import.meta.env.VITE_MEGA_FOLDER_URL_3 ?? '').trim()
   if (slot === 3) return (import.meta.env.VITE_MEGA_FOLDER_URL_4 ?? '').trim()
-  return (import.meta.env.VITE_MEGA_FOLDER_URL_5 ?? '').trim()
+  if (slot === 4) return (import.meta.env.VITE_MEGA_FOLDER_URL_5 ?? '').trim()
+  return (import.meta.env.VITE_MEGA_FOLDER_URL_6 ?? '').trim()
 }
 
 function envLabel(slot: MegaSourceSlot): string {
@@ -53,16 +54,17 @@ function envLabel(slot: MegaSourceSlot): string {
   if (slot === 1) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_2 ?? '').trim()
   if (slot === 2) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_3 ?? '').trim()
   if (slot === 3) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_4 ?? '').trim()
-  return (import.meta.env.VITE_MEGA_SOURCE_LABEL_5 ?? '').trim()
+  if (slot === 4) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_5 ?? '').trim()
+  return (import.meta.env.VITE_MEGA_SOURCE_LABEL_6 ?? '').trim()
 }
 
 /**
- * Fuentes definidas en build (Vite): hasta 5 enlaces MEGA.
+ * Fuentes definidas en build (Vite): hasta 6 enlaces MEGA.
  * Si no hay ninguno, se puede usar solo URL manual en localStorage.
  */
 export function getConfiguredMegaSources(): MegaSource[] {
   const out: MegaSource[] = []
-  for (let s = 0; s < 5; s++) {
+  for (let s = 0; s < 6; s++) {
     const slot = s as MegaSourceSlot
     const url = envUrl(slot)
     if (!url) continue
@@ -82,13 +84,13 @@ export function getStoredSourceSlot(): MegaSourceSlot | null {
   const raw = localStorage.getItem(LS_SLOT)
   if (raw === null) return null
   const n = parseInt(raw, 10)
-  if (n === 0 || n === 1 || n === 2 || n === 3 || n === 4) return n as MegaSourceSlot
+  if (n === 0 || n === 1 || n === 2 || n === 3 || n === 4 || n === 5) return n as MegaSourceSlot
   return null
 }
 
 /**
  * Slot de env activo → `public/portadas/url{slot+1}/`
- * (`VITE_MEGA_FOLDER_URL_1` → url1 … `URL_5` → url5).
+ * (`VITE_MEGA_FOLDER_URL_1` → url1 … `URL_6` → url6).
  */
 export function getMegaSourceSlotForPortada(activeFolderUrl: string): MegaSourceSlot | null {
   if (isUsingManualMegaUrl()) return null

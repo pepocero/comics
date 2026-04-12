@@ -117,6 +117,11 @@ export default defineConfig(({ mode }) => {
             urlPattern: /^https:\/\/(mega\.nz|g\.mega\.co\.nz)\/.*/i,
             handler: 'NetworkOnly',
           },
+          /** CDN de ficheros (p. ej. userstorage.mega.co.nz); sin esto el SW puede interceptar mal y fallar la descarga */
+          {
+            urlPattern: /^https:\/\/[a-z0-9.-]+\.mega\.co\.nz\/.*/i,
+            handler: 'NetworkOnly',
+          },
         ],
       },
     }),

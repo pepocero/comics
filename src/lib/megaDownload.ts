@@ -1,12 +1,43 @@
 import type { File as MegaFile } from 'megajs'
 import { toArrayBuffer } from './bufferToArrayBuffer'
 
+const DOWNLOAD_ATTEMPTS = 3
+const RETRY_BASE_MS = 700
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
+/** Errores de red / servidor que a veces se resuelven reintentando (p. ej. net::ERR_CONNECTION_RESET). */
+function isTransientMegaDownloadFailure(err: unknown): boolean {
+  const s =
+    err instanceof Error
+      ? `${err.name} ${err.message}`
+      : typeof err === 'string'
+        ? err
+        : String(err)
+  const l = s.toLowerCase()
+  return (
+    l.includes('reset') ||
+    l.includes('econnreset') ||
+    l.includes('etimedout') ||
+    l.includes('network') ||
+    l.includes('failed to fetch') ||
+    l.includes('load failed') ||
+    l.includes('aborted') ||
+    l.includes('err_connection') ||
+    l.includes('connection closed')
+  )
+}
+
 /**
- * Descarga con eventos `progress` de megajs.
+ * Una sola pasada de descarga megajs (stream).
  * `maxConnections: 1` usa un único fetch + ReadableStream en el navegador: evita casos donde
  * el modo multi-chunk no emite `end` y la promesa no se resuelve (p. ej. algunos entornos en producción).
  */
-export function downloadMegaFileToArrayBuffer(
+function downloadMegaFileToArrayBufferOnce(
   file: MegaFile,
   onProgress: (percent: number) => void,
 ): Promise<ArrayBuffer> {
@@ -71,4 +102,28 @@ export function downloadMegaFileToArrayBuffer(
     })
     stream.on('error', fail)
   })
+}
+
+/**
+ * Descarga con eventos `progress` de megajs y reintentos ante fallos de red transitorios.
+ */
+export async function downloadMegaFileToArrayBuffer(
+  file: MegaFile,
+  onProgress: (percent: number) => void,
+): Promise<ArrayBuffer> {
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
+    try {
+      onProgress(0)
+      return await downloadMegaFileToArrayBufferOnce(file, onProgress)
+    } catch (e) {
+      lastErr = e
+      if (attempt < DOWNLOAD_ATTEMPTS && isTransientMegaDownloadFailure(e)) {
+        await sleep(RETRY_BASE_MS * attempt)
+        continue
+      }
+      throw e instanceof Error ? e : new Error(String(e))
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
 }

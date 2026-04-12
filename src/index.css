@@ -2056,23 +2056,249 @@ button:disabled {
   right: 0;
   bottom: 0;
   z-index: 3;
-  padding: 0.65rem 0.65rem 0.75rem;
+  padding: 0.55rem 0.6rem 0.7rem;
   font-size: 0.82rem;
   font-weight: 600;
   line-height: 1.3;
-  color: var(--cr-home-title);
+  color: #f4f2ff;
+  /* Capa sólida detrás del texto + sombra para leer bien sobre cualquier portada */
+  background: linear-gradient(transparent, rgba(6, 4, 12, 0.55)),
+    linear-gradient(180deg, rgba(8, 6, 16, 0.2) 0%, rgba(6, 4, 12, 0.92) 45%, rgba(4, 3, 10, 0.96) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   text-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.9),
-    0 2px 12px rgba(0, 0, 0, 0.75);
-  background: linear-gradient(transparent, rgba(6, 4, 12, 0.82));
+    0 0 8px rgba(0, 0, 0, 0.95),
+    0 1px 2px rgba(0, 0, 0, 1),
+    0 2px 14px rgba(0, 0, 0, 0.85);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  border-radius: 0 0 11px 11px;
 }
 
 .file-list--after-grid {
   padding-top: 0.25rem;
+}
+
+/* Búsqueda global en la biblioteca MEGA (misma estética azul / cristal que el bloque de Inicio) */
+.mega-library-search {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.85rem;
+  padding: 1rem 1.05rem 1.05rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(8, 12, 28, 0.42);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(6px);
+}
+
+.mega-library-search .mega-library-search-label-block,
+.mega-library-search .mega-library-search-meta,
+.mega-library-search .mega-library-search-scope-legend {
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.85),
+    0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
+.mega-library-search-form {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.mega-library-search-label-block {
+  flex: 1 1 4.5rem;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--cr-text);
+}
+
+.mega-library-search-input-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: stretch;
+}
+
+.mega-library-search-input-row input[type='search'] {
+  flex: 1 1 10rem;
+  min-width: 0;
+  width: auto;
+  box-sizing: border-box;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.92rem;
+  border-radius: 10px;
+  border: 1px solid var(--cr-link);
+  background: rgba(12, 18, 42, 0.58);
+  color: #f0f4ff;
+  box-shadow: 0 4px 16px rgba(45, 55, 110, 0.35);
+}
+
+.mega-library-search-input-row input[type='search']:focus {
+  outline: 2px solid rgba(154, 184, 255, 0.45);
+  outline-offset: 1px;
+}
+
+.mega-library-search-input-row input[type='search']::placeholder {
+  color: rgba(200, 212, 255, 0.55);
+}
+
+.mega-library-search-submit {
+  flex-shrink: 0;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: 10px;
+  border: 1px solid var(--cr-link);
+  background: linear-gradient(180deg, var(--cr-btn-primary) 0%, var(--cr-tab-badge-bg) 100%);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(45, 55, 110, 0.45);
+  font: inherit;
+}
+
+.mega-library-search-submit:hover {
+  filter: brightness(1.06);
+}
+
+.mega-library-search-scope {
+  flex: 1 1 100%;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.mega-library-search-scope-legend {
+  width: 100%;
+  padding: 0;
+  margin: 0 0 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(200, 212, 255, 0.9);
+}
+
+.mega-library-search-scope-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.85rem;
+  align-items: center;
+}
+
+.mega-library-search-scope-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: var(--cr-text-soft);
+  cursor: pointer;
+  user-select: none;
+}
+
+.mega-library-search-scope-option input {
+  accent-color: var(--cr-link);
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.mega-library-search-meta {
+  width: 100%;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--cr-text-soft);
+}
+
+[data-theme='light'] .mega-library-search {
+  border: 1px solid rgba(30, 74, 158, 0.28);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 28px rgba(30, 50, 120, 0.12);
+}
+
+[data-theme='light'] .mega-library-search .mega-library-search-label-block,
+[data-theme='light'] .mega-library-search .mega-library-search-meta,
+[data-theme='light'] .mega-library-search .mega-library-search-scope-legend {
+  text-shadow: none;
+}
+
+[data-theme='light'] .mega-library-search-scope-legend {
+  color: var(--cr-label);
+}
+
+[data-theme='light'] .mega-library-search-input-row input[type='search'] {
+  border-color: var(--cr-link);
+  background: rgba(248, 250, 255, 0.98);
+  color: var(--cr-input-text);
+  box-shadow: 0 2px 10px rgba(30, 74, 158, 0.12);
+}
+
+[data-theme='light'] .mega-library-search-input-row input[type='search']::placeholder {
+  color: var(--cr-text-faint);
+}
+
+[data-theme='light'] .mega-library-search-input-row input[type='search']:focus {
+  outline-color: rgba(30, 74, 158, 0.35);
+}
+
+[data-theme='light'] .mega-library-search-meta {
+  color: var(--cr-text-soft);
+}
+
+.mega-library-search-results {
+  margin-top: 0.25rem;
+}
+
+.mega-search-hit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--cr-border-muted);
+  background: var(--cr-surface);
+}
+
+.mega-search-hit-path {
+  font-size: 0.72rem;
+  color: var(--cr-muted);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.mega-search-hit-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--cr-text);
+  word-break: break-word;
+}
+
+.mega-search-hit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
 }
 
 .mega-browser-panel {

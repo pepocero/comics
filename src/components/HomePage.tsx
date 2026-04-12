@@ -26,7 +26,7 @@ export function HomePage({ onGoSources, onGoLibrary, libraryReady }: Props) {
             Fuentes
           </h3>
           <p>
-            La app incluye 5 fuentes predeterminadas (carpetas de MEGA con colecciones de cómics).
+            La app incluye hasta 6 fuentes predeterminadas (carpetas de MEGA con colecciones de cómics).
             También puedes añadir cualquier carpeta compartida de MEGA.
           </p>
           <p>

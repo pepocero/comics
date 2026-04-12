@@ -1,5 +1,5 @@
 import { File as MegaFile } from 'megajs'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { parseMegaFolderUrl } from '../lib/parseMegaFolderUrl'
 import { downloadMegaFileToArrayBuffer } from '../lib/megaDownload'
 import { formatBytes } from '../lib/formatBytes'
@@ -7,6 +7,7 @@ import { loadViewerPagesFromMegaCache, type CachedComicMeta } from '../lib/megaC
 import {
   putCachedComic,
   deleteCachedComic,
+  getCachedComic,
   listCachedComicMeta,
   verifyCachedComicBytes,
 } from '../lib/comicStorage'
@@ -20,6 +21,8 @@ import {
 } from '../lib/megaFavorites'
 import { megaFileCacheId } from '../lib/megaFileId'
 import { isMegaListHiddenFile } from '../lib/megaListHiddenFiles'
+import { decodeTextFileForDisplay } from '../lib/decodeTextFileForDisplay'
+import { isMegaLibraryListableFile } from '../lib/megaLibraryListableFiles'
 import { isMegaSeparatorPlaceholderFolder } from '../lib/megaPlaceholderFolder'
 import type { ViewerPage } from './ComicViewer'
 import type { LocalComicOpenPayload } from './LocalComicOpenButton'
@@ -51,10 +54,95 @@ function sortEntries(files: MegaFile[]): MegaFile[] {
 
 function visibleSortedEntries(node: MegaFile): MegaFile[] {
   const entriesRaw = node.directory ? sortEntries(node.children ?? []) : []
-  return entriesRaw.filter(
-    (f) =>
-      !(f.directory && isMegaSeparatorPlaceholderFolder(f.name)) && !isMegaListHiddenFile(f.name),
+  return entriesRaw.filter((f) => {
+    if (f.directory && isMegaSeparatorPlaceholderFolder(f.name)) return false
+    if (isMegaListHiddenFile(f.name)) return false
+    if (!f.directory && !isMegaLibraryListableFile(f.name)) return false
+    return true
+  })
+}
+
+/** Coincidencia de búsqueda: `parentTrail` termina en la carpeta que contiene `file` (p. ej. [root, A, B] si file está en B). */
+type SearchHit = {
+  file: MegaFile
+  parentTrail: MegaFile[]
+}
+
+type MegaLibrarySearchScope = 'all' | 'folders' | 'files'
+
+function matchesSearchQuery(
+  f: MegaFile,
+  trailToFolder: MegaFile[],
+  q: string,
+): boolean {
+  const label = (f.name || '').toLowerCase()
+  const pathChain = [...trailToFolder.map((n) => (n.name || '').toLowerCase()), label].join('/')
+  return label.includes(q) || pathChain.includes(q)
+}
+
+function shouldIncludeSearchHit(f: MegaFile, scope: MegaLibrarySearchScope): boolean {
+  if (scope === 'all') return true
+  if (scope === 'folders') return f.directory
+  return !f.directory
+}
+
+function collectSearchHits(
+  root: MegaFile,
+  query: string,
+  scope: MegaLibrarySearchScope,
+): SearchHit[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return []
+
+  const hits: SearchHit[] = []
+
+  function walk(folder: MegaFile, trailToFolder: MegaFile[]): void {
+    const entries = visibleSortedEntries(folder)
+    for (const f of entries) {
+      if (matchesSearchQuery(f, trailToFolder, q) && shouldIncludeSearchHit(f, scope)) {
+        hits.push({ file: f, parentTrail: trailToFolder })
+      }
+      if (f.directory) {
+        walk(f, [...trailToFolder, f])
+      }
+    }
+  }
+
+  walk(root, [root])
+
+  hits.sort((a, b) => {
+    const pa = [...a.parentTrail.slice(1).map((n) => n.name || ''), a.file.name || ''].join('/')
+    const pb = [...b.parentTrail.slice(1).map((n) => n.name || ''), b.file.name || ''].join('/')
+    return pa.localeCompare(pb, undefined, { numeric: true, sensitivity: 'base' })
+  })
+
+  return hits
+}
+
+function formatHitPath(hit: SearchHit): string {
+  const parts = [...hit.parentTrail.slice(1).map((n) => n.name || ''), hit.file.name || ''].filter(
+    Boolean,
   )
+  return parts.join(' / ')
+}
+
+/**
+ * Vuelve a enlazar la ruta desde `root` por nombre (mismos nodos que si navegaras carpeta a carpeta).
+ * Tras «Abrir carpeta» desde la búsqueda, megajs puede comportarse mejor al descargar usando esta cadena.
+ */
+function resolveBreadcrumbsFromRoot(root: MegaFile, trail: MegaFile[]): MegaFile[] {
+  if (trail.length === 0) return [root]
+  let current = root
+  const out: MegaFile[] = [root]
+  for (let i = 1; i < trail.length; i++) {
+    const wantName = trail[i].name || ''
+    const kids = visibleSortedEntries(current).filter((f) => f.directory)
+    const next = kids.find((f) => (f.name || '') === wantName)
+    if (!next) return trail
+    out.push(next)
+    current = next
+  }
+  return out
 }
 
 function isArchiveFileName(name: string): boolean {
@@ -92,18 +180,22 @@ export function MegaBrowser({
 
   const [root, setRoot] = useState<MegaFile | null>(null)
   const [breadcrumbs, setBreadcrumbs] = useState<MegaFile[]>([])
+  const [librarySearchDraft, setLibrarySearchDraft] = useState('')
+  const [librarySearchCommitted, setLibrarySearchCommitted] = useState('')
+  const [librarySearchScope, setLibrarySearchScope] = useState<MegaLibrarySearchScope>('all')
 
   const current = breadcrumbs[breadcrumbs.length - 1] ?? null
-  const entriesRaw = current?.directory ? sortEntries(current.children ?? []) : []
-  const entries = entriesRaw.filter(
-    (f) =>
-      !(f.directory && isMegaSeparatorPlaceholderFolder(f.name)) && !isMegaListHiddenFile(f.name),
-  )
+  const entries = current?.directory ? visibleSortedEntries(current) : []
 
   const favoriteIdSet = useMemo(
     () => new Set(getMegaFavorites().map((f) => f.fileId)),
     [favBump],
   )
+
+  const searchHits = useMemo(() => {
+    if (!root || !librarySearchCommitted.trim()) return []
+    return collectSearchHits(root, librarySearchCommitted.trim(), librarySearchScope)
+  }, [root, librarySearchCommitted, librarySearchScope])
 
   const refreshCacheInfo = useCallback(() => {
     void listCachedComicMeta().then((rows) => {
@@ -130,6 +222,8 @@ export function MegaBrowser({
     setLoadingTree(true)
     setRoot(null)
     setBreadcrumbs([])
+    setLibrarySearchDraft('')
+    setLibrarySearchCommitted('')
 
     const file = MegaFile.fromURL(parsed.url)
     file
@@ -205,12 +299,47 @@ export function MegaBrowser({
     setBreadcrumbs((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev))
   }, [])
 
+  const clearLibrarySearch = useCallback(() => {
+    setLibrarySearchDraft('')
+    setLibrarySearchCommitted('')
+  }, [])
+
+  /** Incluye la ✕ nativa de `type="search"`: al vaciar el cuadro se quita también la búsqueda aplicada. */
+  const onLibrarySearchDraftChange = useCallback((value: string) => {
+    setLibrarySearchDraft(value)
+    if (value.trim() === '') {
+      setLibrarySearchCommitted('')
+    }
+  }, [])
+
+  const submitLibrarySearch = useCallback(
+    (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault()
+      setLibrarySearchCommitted(librarySearchDraft.trim())
+    },
+    [librarySearchDraft],
+  )
+
+  const navigateToSearchHit = useCallback(
+    (hit: SearchHit, clearQuery = true) => {
+      if (!root) return
+      if (hit.file.directory) {
+        setBreadcrumbs(resolveBreadcrumbsFromRoot(root, [...hit.parentTrail, hit.file]))
+      } else {
+        setBreadcrumbs(resolveBreadcrumbsFromRoot(root, hit.parentTrail))
+      }
+      if (clearQuery) clearLibrarySearch()
+    },
+    [root, clearLibrarySearch],
+  )
+
   const toggleMegaFavorite = useCallback(
-    (file: MegaFile) => {
+    (file: MegaFile, pathLabelsOverride?: string[]) => {
       const name = file.name || '(sin nombre)'
       if (!isArchiveFileName(name)) return
       const id = megaFileCacheId(file)
-      const pathLabels = breadcrumbs.slice(1).map((n) => n.name || '')
+      const pathLabels =
+        pathLabelsOverride ?? breadcrumbs.slice(1).map((n) => n.name || '')
       if (favoriteIdSet.has(id)) {
         removeMegaFavorite(id)
       } else {
@@ -234,14 +363,9 @@ export function MegaBrowser({
   const downloadArchiveToCache = useCallback(
     async (file: MegaFile) => {
       const name = file.name || 'cómic'
-      const lower = name.toLowerCase()
-      const allowed =
-        lower.endsWith('.cbz') ||
-        lower.endsWith('.zip') ||
-        lower.endsWith('.cbr') ||
-        lower.endsWith('.rar')
+      const allowed = isMegaLibraryListableFile(name)
       if (!allowed) {
-        setToast('Solo se pueden descargar .cbz, .zip, .cbr o .rar.')
+        setToast('Este tipo de archivo no se puede descargar desde aquí.')
         return
       }
 
@@ -304,6 +428,41 @@ export function MegaBrowser({
         void refreshCacheInfo()
         return
       }
+      const lower = meta.name.toLowerCase()
+      const isPdf = lower.endsWith('.pdf')
+      const isTxt = lower.endsWith('.txt')
+      if (isPdf || isTxt) {
+        setOpeningCacheId(cacheId)
+        setToast(null)
+        try {
+          const cached = await getCachedComic(cacheId)
+          if (!cached?.data) {
+            setToast('El archivo ya no está en el dispositivo.')
+            void refreshCacheInfo()
+            return
+          }
+          const blob = isPdf
+            ? new Blob([cached.data], { type: 'application/pdf' })
+            : new Blob([decodeTextFileForDisplay(cached.data)], {
+                type: 'text/plain;charset=utf-8',
+              })
+          const url = URL.createObjectURL(blob)
+          const w = window.open(url, '_blank', 'noopener,noreferrer')
+          if (!w) {
+            URL.revokeObjectURL(url)
+            setToast('Permite ventanas emergentes para ver este archivo en una pestaña nueva.')
+            return
+          }
+          window.setTimeout(() => URL.revokeObjectURL(url), 120_000)
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err)
+          setToast(msg || 'Error al abrir el archivo.')
+        } finally {
+          setOpeningCacheId(null)
+        }
+        return
+      }
+
       setOpeningCacheId(cacheId)
       setToast(null)
       try {
@@ -354,6 +513,7 @@ export function MegaBrowser({
   const atRoot = breadcrumbs.length === 1
   const folderEntries = entries.filter((f) => f.directory)
   const fileEntries = entries.filter((f) => !f.directory)
+  const searchActive = librarySearchCommitted.trim().length > 0
 
   return (
     <div className="browser">
@@ -366,7 +526,71 @@ export function MegaBrowser({
         </div>
       ) : null}
 
-      {atRoot && folderEntries.length > 0 ? (
+      <div className="mega-library-search" role="search">
+        <form className="mega-library-search-form" onSubmit={submitLibrarySearch}>
+          <label className="mega-library-search-label-block" htmlFor="mega-library-search-input">
+            Buscar en toda la biblioteca
+            <div className="mega-library-search-input-row">
+              <input
+                id="mega-library-search-input"
+                type="search"
+                value={librarySearchDraft}
+                onChange={(e) => onLibrarySearchDraftChange(e.target.value)}
+                placeholder="Nombre de carpeta o archivo (p. ej. Spiderman)…"
+                autoComplete="off"
+                spellCheck={false}
+                aria-describedby="mega-library-search-hint mega-library-search-scope-legend"
+              />
+              <button type="submit" className="mega-library-search-submit">
+                Buscar
+              </button>
+            </div>
+          </label>
+          <fieldset className="mega-library-search-scope">
+            <legend id="mega-library-search-scope-legend" className="mega-library-search-scope-legend">
+              Buscar en
+            </legend>
+            <div className="mega-library-search-scope-options" role="radiogroup" aria-label="Tipo de resultado">
+              {(
+                [
+                  { value: 'all' as const, label: 'Todo' },
+                  { value: 'folders' as const, label: 'Carpetas' },
+                  { value: 'files' as const, label: 'Archivos' },
+                ] as const
+              ).map(({ value, label }) => (
+                <label key={value} className="mega-library-search-scope-option">
+                  <input
+                    type="radio"
+                    name="mega-library-search-scope"
+                    value={value}
+                    checked={librarySearchScope === value}
+                    onChange={() => setLibrarySearchScope(value)}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          {searchActive ? (
+            <button type="button" className="mega-library-search-clear" onClick={clearLibrarySearch}>
+              Limpiar
+            </button>
+          ) : null}
+        </form>
+        <p id="mega-library-search-hint" className="mega-library-search-meta">
+          {searchActive
+            ? `${searchHits.length} resultado${searchHits.length === 1 ? '' : 's'} · «${librarySearchCommitted.trim()}» · ${
+                librarySearchScope === 'folders'
+                  ? 'solo carpetas'
+                  : librarySearchScope === 'files'
+                    ? 'solo archivos'
+                    : 'carpetas y archivos'
+              }`
+            : 'Escribe el texto y pulsa Buscar. La cruz del campo vacía el texto y cierra la búsqueda. Elige carpetas, archivos o ambos.'}
+        </p>
+      </div>
+
+      {!searchActive && atRoot && folderEntries.length > 0 ? (
         <MegaRootFolderCards
           megaFolderUrl={megaFolderUrl}
           folders={folderEntries}
@@ -375,7 +599,7 @@ export function MegaBrowser({
         />
       ) : null}
 
-      {breadcrumbs.length > 1 ? (
+      {!searchActive && breadcrumbs.length > 1 ? (
         <div className="folder-up-row">
           <button
             type="button"
@@ -389,6 +613,117 @@ export function MegaBrowser({
         </div>
       ) : null}
 
+      {searchActive ? (
+        <ul className="file-list mega-library-search-results" aria-label="Resultados de búsqueda">
+          {searchHits.length === 0 ? (
+            <li>
+              <p className="muted">Ninguna coincidencia. Prueba con otras palabras o revisa la ortografía.</p>
+            </li>
+          ) : (
+            searchHits.map((hit) => {
+              const f = hit.file
+              const label = f.name || '(sin nombre)'
+              const pathLine = formatHitPath(hit)
+              if (f.directory) {
+                return (
+                  <li key={`dir-${megaFileCacheId(f)}`}>
+                    <div className="mega-search-hit">
+                      <div className="mega-search-hit-path">{pathLine}</div>
+                      <div className="mega-search-hit-name">📁 {label}</div>
+                      <div className="mega-search-hit-actions">
+                        <button
+                          type="button"
+                          onClick={() => navigateToSearchHit(hit)}
+                          disabled={!!downloadingName || !!openingCacheId}
+                        >
+                          Abrir carpeta
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                )
+              }
+              const cacheId = megaFileCacheId(f)
+              const isCached = cachedIdSet.has(cacheId)
+              const isBusy = downloadingName === label
+              const showProgress = isBusy && downloadProgress && downloadProgress.name === label
+              const busyOpen = openingCacheId === cacheId
+              const showFav = isArchiveFileName(label)
+              const pathLabelsForFav = hit.parentTrail.slice(1).map((n) => n.name || '')
+              const isFav = favoriteIdSet.has(cacheId)
+
+              return (
+                <li key={cacheId}>
+                  <div className="mega-search-hit">
+                    <div className="mega-search-hit-path">{pathLine}</div>
+                    <div className="mega-search-hit-name">📄 {label}</div>
+                    <div className="mega-search-hit-actions">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => navigateToSearchHit(hit)}
+                        disabled={!!downloadingName || !!openingCacheId}
+                      >
+                        Ver en carpeta
+                      </button>
+                      {isCached ? (
+                        <button
+                          type="button"
+                          onClick={() => void openComicFromCache(cacheId)}
+                          disabled={!!downloadingName || !!openingCacheId}
+                        >
+                          {busyOpen ? 'Abriendo…' : 'Abrir'}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void downloadArchiveToCache(f)}
+                          disabled={!!downloadingName || !!openingCacheId}
+                        >
+                          {isBusy ? 'Descargando…' : 'Descargar'}
+                        </button>
+                      )}
+                      {showFav ? (
+                        <button
+                          type="button"
+                          className="file-fav-btn"
+                          disabled={!!downloadingName || !!openingCacheId}
+                          onClick={() => toggleMegaFavorite(f, pathLabelsForFav)}
+                          aria-label={isFav ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+                          aria-pressed={isFav}
+                          title={isFav ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+                        >
+                          {isFav ? '★' : '☆'}
+                        </button>
+                      ) : null}
+                    </div>
+                    {showProgress && downloadProgress ? (
+                      <div
+                        className="file-download-row"
+                        role="progressbar"
+                        aria-valuenow={downloadProgress.percent}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label={`Descarga ${downloadProgress.percent} por ciento`}
+                      >
+                        <div className="file-download-track">
+                          <div
+                            className="file-download-fill"
+                            style={{ width: `${downloadProgress.percent}%` }}
+                          />
+                        </div>
+                        <span className="file-download-pct">{downloadProgress.percent}%</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </li>
+              )
+            })
+          )}
+        </ul>
+      ) : null}
+
+      {!searchActive ? (
       <ul className={`file-list${atRoot && folderEntries.length > 0 ? ' file-list--after-grid' : ''}`}>
         {(atRoot ? fileEntries : entries).map((f) => {
           const label = f.name || '(sin nombre)'
@@ -522,8 +857,11 @@ export function MegaBrowser({
           )
         })}
       </ul>
+      ) : null}
 
-      {(atRoot ? fileEntries : entries).length === 0 && !(atRoot && folderEntries.length > 0) ? (
+      {!searchActive &&
+      (atRoot ? fileEntries : entries).length === 0 &&
+      !(atRoot && folderEntries.length > 0) ? (
         <p className="muted empty-folder">Carpeta vacía.</p>
       ) : null}
     </div>
