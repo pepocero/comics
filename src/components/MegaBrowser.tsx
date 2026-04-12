@@ -1,5 +1,5 @@
 import { File as MegaFile } from 'megajs'
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { parseMegaFolderUrl } from '../lib/parseMegaFolderUrl'
 import { downloadMegaFileToArrayBuffer } from '../lib/megaDownload'
 import { formatBytes } from '../lib/formatBytes'
@@ -183,6 +183,9 @@ export function MegaBrowser({
   const [librarySearchDraft, setLibrarySearchDraft] = useState('')
   const [librarySearchCommitted, setLibrarySearchCommitted] = useState('')
   const [librarySearchScope, setLibrarySearchScope] = useState<MegaLibrarySearchScope>('all')
+  /** Al bajar el scroll se pliega el bloque de búsqueda para ganar espacio al listado. */
+  const [librarySearchBarCollapsed, setLibrarySearchBarCollapsed] = useState(false)
+  const lastScrollYRef = useRef(0)
 
   const current = breadcrumbs[breadcrumbs.length - 1] ?? null
   const entries = current?.directory ? visibleSortedEntries(current) : []
@@ -224,6 +227,7 @@ export function MegaBrowser({
     setBreadcrumbs([])
     setLibrarySearchDraft('')
     setLibrarySearchCommitted('')
+    setLibrarySearchBarCollapsed(false)
 
     const file = MegaFile.fromURL(parsed.url)
     file
@@ -251,6 +255,32 @@ export function MegaBrowser({
       cancelled = true
     }
   }, [megaFolderUrl])
+
+  useEffect(() => {
+    if (!root || loadingTree || loadError) return
+    const scrollEl = document.scrollingElement ?? document.documentElement
+    lastScrollYRef.current = scrollEl.scrollTop
+    const thresholdPx = 14
+
+    const onScroll = (): void => {
+      const y = scrollEl.scrollTop
+      const dy = y - lastScrollYRef.current
+      lastScrollYRef.current = y
+
+      if (y < 24) {
+        setLibrarySearchBarCollapsed(false)
+        return
+      }
+      if (dy > thresholdPx) {
+        setLibrarySearchBarCollapsed(true)
+      } else if (dy < -thresholdPx) {
+        setLibrarySearchBarCollapsed(false)
+      }
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [root, loadingTree, loadError])
 
   useEffect(() => {
     if (!root || loadingTree || loadError) return
@@ -526,6 +556,10 @@ export function MegaBrowser({
         </div>
       ) : null}
 
+      <div
+        className={`mega-library-search-wrap${librarySearchBarCollapsed ? ' mega-library-search-wrap--collapsed' : ''}`}
+        onFocusCapture={() => setLibrarySearchBarCollapsed(false)}
+      >
       <div className="mega-library-search" role="search">
         <form className="mega-library-search-form" onSubmit={submitLibrarySearch}>
           <label className="mega-library-search-label-block" htmlFor="mega-library-search-input">
@@ -539,7 +573,11 @@ export function MegaBrowser({
                 placeholder="Nombre de carpeta o archivo (p. ej. Spiderman)…"
                 autoComplete="off"
                 spellCheck={false}
-                aria-describedby="mega-library-search-hint mega-library-search-scope-legend"
+                aria-describedby={
+                  searchActive
+                    ? 'mega-library-search-hint mega-library-search-scope-legend'
+                    : 'mega-library-search-scope-legend'
+                }
               />
               <button type="submit" className="mega-library-search-submit">
                 Buscar
@@ -571,23 +609,19 @@ export function MegaBrowser({
               ))}
             </div>
           </fieldset>
-          {searchActive ? (
-            <button type="button" className="mega-library-search-clear" onClick={clearLibrarySearch}>
-              Limpiar
-            </button>
-          ) : null}
         </form>
-        <p id="mega-library-search-hint" className="mega-library-search-meta">
-          {searchActive
-            ? `${searchHits.length} resultado${searchHits.length === 1 ? '' : 's'} · «${librarySearchCommitted.trim()}» · ${
-                librarySearchScope === 'folders'
-                  ? 'solo carpetas'
-                  : librarySearchScope === 'files'
-                    ? 'solo archivos'
-                    : 'carpetas y archivos'
-              }`
-            : 'Escribe el texto y pulsa Buscar. La cruz del campo vacía el texto y cierra la búsqueda. Elige carpetas, archivos o ambos.'}
-        </p>
+        {searchActive ? (
+          <p id="mega-library-search-hint" className="mega-library-search-meta">
+            {`${searchHits.length} resultado${searchHits.length === 1 ? '' : 's'} · «${librarySearchCommitted.trim()}» · ${
+              librarySearchScope === 'folders'
+                ? 'solo carpetas'
+                : librarySearchScope === 'files'
+                  ? 'solo archivos'
+                  : 'carpetas y archivos'
+            }`}
+          </p>
+        ) : null}
+      </div>
       </div>
 
       {!searchActive && atRoot && folderEntries.length > 0 ? (

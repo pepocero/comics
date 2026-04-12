@@ -2080,16 +2080,35 @@ button:disabled {
   padding-top: 0.25rem;
 }
 
+/* Búsqueda MEGA: el contenedor se pliega al bajar el scroll (ver MegaBrowser). */
+.mega-library-search-wrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.32s ease, margin-bottom 0.32s ease;
+  margin-bottom: 0.85rem;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.mega-library-search-wrap--collapsed {
+  grid-template-rows: 0fr;
+  margin-bottom: 0;
+}
+
+.mega-library-search-wrap > .mega-library-search {
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* Búsqueda global en la biblioteca MEGA (misma estética azul / cristal que el bloque de Inicio) */
 .mega-library-search {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 4;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  margin: 0 0 0.85rem;
+  margin: 0;
   padding: 1rem 1.05rem 1.05rem;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
