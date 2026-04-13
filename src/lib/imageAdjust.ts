@@ -1,6 +1,6 @@
 const LS_KEY = 'comicread_image_adjust_v1'
 
-export type ImageAdjustMode = 'auto' | 'manual'
+export type ImageAdjustMode = 'auto' | 'manual' | 'smart'
 
 export type ImageAdjustState = {
   mode: ImageAdjustMode
@@ -55,7 +55,9 @@ export function loadImageAdjust(): ImageAdjustState {
     const raw = localStorage.getItem(LS_KEY)
     if (!raw) return { ...defaultImageAdjust }
     const p = JSON.parse(raw) as Partial<ImageAdjustState>
-    if (p.mode !== 'auto' && p.mode !== 'manual') return { ...defaultImageAdjust }
+    if (p.mode !== 'auto' && p.mode !== 'manual' && p.mode !== 'smart') {
+      return { ...defaultImageAdjust }
+    }
     return {
       mode: p.mode,
       brightness: clamp(Number(p.brightness) || 100, 50, 150),

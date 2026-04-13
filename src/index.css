@@ -1008,7 +1008,8 @@ button:disabled {
   min-width: 0;
   width: 100%;
   max-width: 100%;
-  overflow: hidden;
+  /* visible: el panel de ajuste cuelga hacia abajo; hidden lo recortaba y quedaba bajo el lienzo */
+  overflow: visible;
   box-sizing: border-box;
 }
 
@@ -1201,6 +1202,7 @@ button:disabled {
 
 .comic-adjust-wrap {
   position: relative;
+  z-index: 400;
 }
 
 .comic-adjust-trigger {
@@ -1219,7 +1221,7 @@ button:disabled {
   position: absolute;
   top: calc(100% + 0.35rem);
   right: 0;
-  z-index: 120;
+  z-index: 401;
   min-width: 16rem;
   max-width: min(22rem, calc(100vw - 1.5rem));
   padding: 0.75rem 0.85rem;
@@ -1234,6 +1236,33 @@ button:disabled {
   flex-wrap: wrap;
   gap: 0.75rem 1rem;
   margin-bottom: 0.6rem;
+}
+
+.comic-adjust-smart-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-bottom: 0.35rem;
+}
+
+.comic-adjust-smart-readout {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.comic-adjust-smart-rerun {
+  width: 100%;
+  margin-top: 0.15rem;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.78rem;
+}
+
+.comic-adjust-error {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--cr-error);
 }
 
 .comic-adjust-radio {

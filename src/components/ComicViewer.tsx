@@ -14,6 +14,7 @@ import {
   saveImageAdjust,
   type ImageAdjustState,
 } from '../lib/imageAdjust'
+import { computeSmartImageAdjust } from '../lib/smartImageAdjust'
 
 export type ViewerPage = {
   name: string
@@ -527,6 +528,11 @@ export function ComicViewer({
   const activePageItemRef = useRef<HTMLLIElement | null>(null)
   /** Incrementar fuerza remount del lienzo (misma página); limpia gestos/capturas como al cambiar de página. */
   const [canvasRemountTick, setCanvasRemountTick] = useState(0)
+  const [smartBusy, setSmartBusy] = useState(false)
+  const [smartError, setSmartError] = useState<string | null>(null)
+  const [smartRerunKey, setSmartRerunKey] = useState(0)
+
+  const pageUrl = pages[index]?.url ?? ''
 
   const imageFilter = useMemo(() => buildImageFilterCss(imageAdjust), [imageAdjust])
 
@@ -546,6 +552,34 @@ export function ComicViewer({
   useEffect(() => {
     saveImageAdjust(imageAdjust)
   }, [imageAdjust])
+
+  useEffect(() => {
+    if (imageAdjust.mode !== 'smart' || !pageUrl) {
+      setSmartError(null)
+      return
+    }
+    let cancelled = false
+    setSmartBusy(true)
+    setSmartError(null)
+    void computeSmartImageAdjust(pageUrl)
+      .then((partial) => {
+        if (cancelled) return
+        setImageAdjust((s) => {
+          if (s.mode !== 'smart') return s
+          return { ...s, ...partial }
+        })
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return
+        setSmartError(e instanceof Error ? e.message : String(e))
+      })
+      .finally(() => {
+        if (!cancelled) setSmartBusy(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [imageAdjust.mode, pageUrl, smartRerunKey])
 
   useEffect(() => {
     if (!adjustPanelOpen) return
@@ -724,6 +758,7 @@ export function ComicViewer({
                       type="radio"
                       name="comic-img-mode"
                       checked={imageAdjust.mode === 'auto'}
+                      disabled={smartBusy}
                       onChange={() => setImageAdjust((s) => ({ ...s, mode: 'auto' }))}
                     />
                     Automático
@@ -733,17 +768,53 @@ export function ComicViewer({
                       type="radio"
                       name="comic-img-mode"
                       checked={imageAdjust.mode === 'manual'}
+                      disabled={smartBusy}
                       onChange={() => setImageAdjust((s) => ({ ...s, mode: 'manual' }))}
                     />
                     Manual
                   </label>
+                  <label className="comic-adjust-radio">
+                    <input
+                      type="radio"
+                      name="comic-img-mode"
+                      checked={imageAdjust.mode === 'smart'}
+                      disabled={smartBusy}
+                      onChange={() => setImageAdjust((s) => ({ ...s, mode: 'smart' }))}
+                    />
+                    Inteligente
+                  </label>
                 </div>
                 {imageAdjust.mode === 'auto' ? (
                   <p className="comic-adjust-hint muted">
-                    Refuerzo suave de brillo, contraste y color para lectura. Cambia a manual para
-                    afinar tú mismo.
+                    Refuerzo suave de brillo, contraste y color para lectura. Cambia a manual o
+                    inteligente para afinar.
                   </p>
-                ) : (
+                ) : null}
+                {imageAdjust.mode === 'smart' ? (
+                  <div className="comic-adjust-smart-block">
+                    <p className="comic-adjust-hint muted">
+                      {smartBusy
+                        ? 'Analizando la página visible (muestreo de color y nitidez)…'
+                        : 'Ajustes calculados a partir de esta página: tono medio, variación de brillo, color y nitidez detectada. Al cambiar de página se vuelve a analizar.'}
+                    </p>
+                    {smartError ? <p className="comic-adjust-error">{smartError}</p> : null}
+                    {!smartBusy && !smartError ? (
+                      <p className="comic-adjust-smart-readout muted">
+                        Brillo {imageAdjust.brightness}% · Contraste {imageAdjust.contrast}% ·
+                        Saturación {imageAdjust.saturation}% · Nitidez {imageAdjust.sharpness}%
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="comic-adjust-smart-rerun btn-secondary"
+                      disabled={smartBusy || !pageUrl}
+                      onClick={() => setSmartRerunKey((k) => k + 1)}
+                    >
+                      Volver a analizar esta página
+                    </button>
+                  </div>
+                ) : null}
+                {imageAdjust.mode === 'manual' ? (
                   <div className="comic-adjust-sliders">
                     <label className="comic-adjust-row">
                       <span>Brillo {imageAdjust.brightness}%</span>
@@ -791,28 +862,30 @@ export function ComicViewer({
                       />
                     </label>
                   </div>
-                )}
-                <div className="comic-adjust-sharp-block">
-                  <label className="comic-adjust-row">
-                    <span>Nitidez {imageAdjust.sharpness}%</span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={imageAdjust.sharpness}
-                      onChange={(e) =>
-                        setImageAdjust((s) => ({
-                          ...s,
-                          sharpness: Number(e.target.value),
-                        }))
-                      }
-                    />
-                  </label>
-                  <p className="comic-adjust-sharp-hint muted">
-                    0 = sin efecto. Por encima de 0 se aplica un refuerzo de bordes (suave / medio /
-                    fuerte según el valor). Puede acentuar ruido en escaneados muy granosos.
-                  </p>
-                </div>
+                ) : null}
+                {imageAdjust.mode !== 'smart' ? (
+                  <div className="comic-adjust-sharp-block">
+                    <label className="comic-adjust-row">
+                      <span>Nitidez {imageAdjust.sharpness}%</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        value={imageAdjust.sharpness}
+                        onChange={(e) =>
+                          setImageAdjust((s) => ({
+                            ...s,
+                            sharpness: Number(e.target.value),
+                          }))
+                        }
+                      />
+                    </label>
+                    <p className="comic-adjust-sharp-hint muted">
+                      0 = sin efecto. Por encima de 0 se aplica un refuerzo de bordes (suave / medio /
+                      fuerte según el valor). Puede acentuar ruido en escaneados muy granosos.
+                    </p>
+                  </div>
+                ) : null}
                 <button
                   type="button"
                   className="comic-adjust-reset btn-secondary"
