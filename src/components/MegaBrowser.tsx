@@ -1,5 +1,14 @@
 import { File as MegaFile } from 'megajs'
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
+import { flushSync } from 'react-dom'
 import { parseMegaFolderUrl } from '../lib/parseMegaFolderUrl'
 import { downloadMegaFileToArrayBuffer } from '../lib/megaDownload'
 import { formatBytes } from '../lib/formatBytes'
@@ -155,6 +164,13 @@ function isArchiveFileName(name: string): boolean {
   )
 }
 
+/** Clave estable por fuente MEGA + cadena de carpetas (ids de nodo) para recordar scroll vertical. */
+function megaBreadcrumbScrollKey(megaFolderUrl: string, crumbs: MegaFile[]): string {
+  const u = megaFolderUrl.trim()
+  const ids = crumbs.map((c) => megaFileCacheId(c)).join('/')
+  return `${u}|${ids}`
+}
+
 export function MegaBrowser({
   megaFolderUrl,
   onOpenSettings,
@@ -186,6 +202,10 @@ export function MegaBrowser({
   /** Al bajar el scroll se pliega el bloque de búsqueda para ganar espacio al listado. */
   const [librarySearchBarCollapsed, setLibrarySearchBarCollapsed] = useState(false)
   const lastScrollYRef = useRef(0)
+  const scrollDownAccumRef = useRef(0)
+  const scrollUpAccumRef = useRef(0)
+  const scrollYByBreadcrumbKeyRef = useRef<Map<string, number>>(new Map())
+  const prevBreadcrumbDepthRef = useRef(0)
 
   const current = breadcrumbs[breadcrumbs.length - 1] ?? null
   const entries = current?.directory ? visibleSortedEntries(current) : []
@@ -223,6 +243,8 @@ export function MegaBrowser({
 
     setLoadError(null)
     setLoadingTree(true)
+    scrollYByBreadcrumbKeyRef.current.clear()
+    prevBreadcrumbDepthRef.current = 0
     setRoot(null)
     setBreadcrumbs([])
     setLibrarySearchDraft('')
@@ -256,11 +278,30 @@ export function MegaBrowser({
     }
   }, [megaFolderUrl])
 
+  useLayoutEffect(() => {
+    if (!root || loadingTree || loadError) return
+    const el = document.scrollingElement ?? document.documentElement
+    const len = breadcrumbs.length
+    const key = megaBreadcrumbScrollKey(megaFolderUrl, breadcrumbs)
+    const saved = scrollYByBreadcrumbKeyRef.current.get(key)
+
+    if (saved !== undefined) {
+      el.scrollTop = saved
+    } else if (len > prevBreadcrumbDepthRef.current) {
+      el.scrollTop = 0
+    }
+
+    prevBreadcrumbDepthRef.current = len
+  }, [breadcrumbs, megaFolderUrl, root, loadingTree, loadError])
+
   useEffect(() => {
     if (!root || loadingTree || loadError) return
     const scrollEl = document.scrollingElement ?? document.documentElement
     lastScrollYRef.current = scrollEl.scrollTop
-    const thresholdPx = 14
+    scrollDownAccumRef.current = 0
+    scrollUpAccumRef.current = 0
+    const collapseDistancePx = 36
+    const expandDistancePx = 52
 
     const onScroll = (): void => {
       const y = scrollEl.scrollTop
@@ -269,18 +310,39 @@ export function MegaBrowser({
 
       if (y < 24) {
         setLibrarySearchBarCollapsed(false)
+        scrollDownAccumRef.current = 0
+        scrollUpAccumRef.current = 0
         return
       }
-      if (dy > thresholdPx) {
-        setLibrarySearchBarCollapsed(true)
-      } else if (dy < -thresholdPx) {
-        setLibrarySearchBarCollapsed(false)
+      const maxScroll = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight)
+      const atBottom = y >= maxScroll - 2
+
+      if (Math.abs(dy) < 0.5) return
+
+      if (dy > 0) {
+        scrollDownAccumRef.current += dy
+        scrollUpAccumRef.current = 0
+        if (!librarySearchBarCollapsed && scrollDownAccumRef.current >= collapseDistancePx) {
+          setLibrarySearchBarCollapsed(true)
+          scrollDownAccumRef.current = 0
+        }
+      } else {
+        scrollUpAccumRef.current += -dy
+        scrollDownAccumRef.current = 0
+        if (
+          librarySearchBarCollapsed &&
+          !atBottom &&
+          scrollUpAccumRef.current >= expandDistancePx
+        ) {
+          setLibrarySearchBarCollapsed(false)
+          scrollUpAccumRef.current = 0
+        }
       }
     }
 
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
-  }, [root, loadingTree, loadError])
+  }, [root, loadingTree, loadError, librarySearchBarCollapsed])
 
   useEffect(() => {
     if (!root || loadingTree || loadError) return
@@ -304,7 +366,11 @@ export function MegaBrowser({
       trail.push(next)
       folder = next
     }
-    setBreadcrumbs(trail)
+    flushSync(() => {
+      setBreadcrumbs(trail)
+    })
+    const navScrollEl = document.scrollingElement ?? document.documentElement
+    navScrollEl.scrollTop = 0
 
     const filesHere = visibleSortedEntries(folder).filter((f) => !f.directory)
     const found = filesHere.some((f) => megaFileCacheId(f) === target.fileId)
@@ -321,9 +387,17 @@ export function MegaBrowser({
     onLibraryNavTargetConsumed,
   ])
 
-  const enterFolder = useCallback((folder: MegaFile) => {
-    setBreadcrumbs((prev) => [...prev, folder])
-  }, [])
+  const enterFolder = useCallback(
+    (folder: MegaFile) => {
+      setBreadcrumbs((prev) => {
+        const scrollEl = document.scrollingElement ?? document.documentElement
+        const key = megaBreadcrumbScrollKey(megaFolderUrl, prev)
+        scrollYByBreadcrumbKeyRef.current.set(key, scrollEl.scrollTop)
+        return [...prev, folder]
+      })
+    },
+    [megaFolderUrl],
+  )
 
   const goUp = useCallback(() => {
     setBreadcrumbs((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev))
@@ -353,11 +427,15 @@ export function MegaBrowser({
   const navigateToSearchHit = useCallback(
     (hit: SearchHit, clearQuery = true) => {
       if (!root) return
-      if (hit.file.directory) {
-        setBreadcrumbs(resolveBreadcrumbsFromRoot(root, [...hit.parentTrail, hit.file]))
-      } else {
-        setBreadcrumbs(resolveBreadcrumbsFromRoot(root, hit.parentTrail))
-      }
+      flushSync(() => {
+        if (hit.file.directory) {
+          setBreadcrumbs(resolveBreadcrumbsFromRoot(root, [...hit.parentTrail, hit.file]))
+        } else {
+          setBreadcrumbs(resolveBreadcrumbsFromRoot(root, hit.parentTrail))
+        }
+      })
+      const el = document.scrollingElement ?? document.documentElement
+      el.scrollTop = 0
       if (clearQuery) clearLibrarySearch()
     },
     [root, clearLibrarySearch],

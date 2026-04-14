@@ -302,7 +302,7 @@ export default function App() {
     return (
       <>
         <BibliotecaSectionBackdrop backdropKey="settings" layout="fullscreen">
-          <SettingsPanel onSaved={refresh} initialSetup />
+          <SettingsPanel onSaved={refresh} initialSetup activeMegaFolderUrl={megaUrl} />
         </BibliotecaSectionBackdrop>
         {viewerEl}
       </>
@@ -319,6 +319,7 @@ export default function App() {
               refresh()
             }}
             onCancel={() => setShowSettings(false)}
+            activeMegaFolderUrl={megaUrl}
           />
         </BibliotecaSectionBackdrop>
         {viewerEl}

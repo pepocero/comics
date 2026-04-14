@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { parseMegaFolderUrl } from '../lib/parseMegaFolderUrl'
 import {
   getManualMegaFolderUrl,
+  getMegaSourceSlotForPortada,
   hasEnvMegaSources,
   setMegaFolderUrl,
 } from '../config/megaSettings'
@@ -17,12 +18,14 @@ import { clearAllReadingProgress, getReadingList, removeReadingProgress } from '
 import { formatBytes } from '../lib/formatBytes'
 import { applyTheme, getStoredTheme, type AppTheme } from '../lib/appTheme'
 import { AppVersionFooter } from './AppVersionFooter'
+import { exportMegaRootFolderCoversZip } from '../lib/megaCoverExport'
 
 type Props = {
   onSaved: () => void
   onCancel?: () => void
   /** Primera ejecución sin URL guardada (solo modo manual sin env): el enlace MEGA es obligatorio arriba */
   initialSetup?: boolean
+  activeMegaFolderUrl?: string
 }
 
 function removeMegaProgressForCacheId(cacheId: string): void {
@@ -31,7 +34,12 @@ function removeMegaProgressForCacheId(cacheId: string): void {
   if (p) removeReadingProgress(p)
 }
 
-export function SettingsPanel({ onSaved, onCancel, initialSetup = false }: Props) {
+export function SettingsPanel({
+  onSaved,
+  onCancel,
+  initialSetup = false,
+  activeMegaFolderUrl = '',
+}: Props) {
   const fromEnv = hasEnvMegaSources()
   const [rows, setRows] = useState<CachedComicMeta[]>([])
   const [loadingList, setLoadingList] = useState(true)
@@ -42,6 +50,10 @@ export function SettingsPanel({ onSaved, onCancel, initialSetup = false }: Props
   const [urlValue, setUrlValue] = useState(() => (fromEnv ? '' : getManualMegaFolderUrl()))
   const [urlError, setUrlError] = useState<string | null>(null)
   const [theme, setTheme] = useState<AppTheme>(() => getStoredTheme())
+  const [coverExportBusy, setCoverExportBusy] = useState(false)
+  const [coverExportMsg, setCoverExportMsg] = useState<string | null>(null)
+  const [coverExportProgress, setCoverExportProgress] = useState('')
+  const [coverExportOverallPercent, setCoverExportOverallPercent] = useState(0)
 
   function handleThemeChange(next: AppTheme): void {
     setTheme(next)
@@ -323,6 +335,115 @@ export function SettingsPanel({ onSaved, onCancel, initialSetup = false }: Props
     </section>
   )
 
+  async function handleExportMegaCoversZip(): Promise<void> {
+    if (!activeMegaFolderUrl.trim()) {
+      setCoverExportMsg('No hay una fuente MEGA activa para exportar.')
+      return
+    }
+    if (
+      !window.confirm(
+        'Se recorrerán todas las carpetas de primer nivel de la fuente actual para extraer la primera imagen del primer cómic de cada una. ¿Continuar?',
+      )
+    ) {
+      return
+    }
+
+    setCoverExportBusy(true)
+    setCoverExportMsg(null)
+    setCoverExportOverallPercent(0)
+    setCoverExportProgress('Iniciando exportación…')
+    try {
+      const sourceSlot = getMegaSourceSlotForPortada(activeMegaFolderUrl)
+      const result = await exportMegaRootFolderCoversZip(activeMegaFolderUrl, (progress) => {
+        setCoverExportOverallPercent(progress.overallPercent)
+        const folderPart = progress.currentFolder ? `Carpeta: ${progress.currentFolder}` : ''
+        const filePart = progress.currentFile ? ` · Archivo: ${progress.currentFile}` : ''
+        const filePct =
+          progress.currentFile && progress.currentFilePercent > 0
+            ? ` · Descarga del archivo: ${progress.currentFilePercent}%`
+            : ''
+        setCoverExportProgress(
+          `${progress.doneFolders}/${progress.totalFolders} · Avance total: ${progress.overallPercent}%${filePct}${folderPart ? ` · ${folderPart}` : ''}${filePart}`,
+        )
+      })
+
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const slotTag = sourceSlot === null ? 'manual' : `url${sourceSlot + 1}`
+      const filename = `portadas_${slotTag}_${stamp}.zip`
+      const blobUrl = URL.createObjectURL(result.zipBlob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(blobUrl)
+
+      setCoverExportMsg(
+        `Exportación terminada: ${result.okCount} portada(s), ${result.skippedCount} omitida(s), ${result.errorCount} error(es). Se descargó ${filename}.`,
+      )
+      setCoverExportOverallPercent(100)
+      setCoverExportProgress('Completado.')
+    } catch (e) {
+      setCoverExportMsg(e instanceof Error ? e.message : 'Error al exportar portadas.')
+      setCoverExportProgress('')
+      setCoverExportOverallPercent(0)
+    } finally {
+      setCoverExportBusy(false)
+    }
+  }
+
+  const megaCoversSection =
+    fromEnv && activeMegaFolderUrl.trim().length > 0 ? (
+      <section className="settings-subsection" aria-labelledby="mega-covers-heading">
+        <h2 id="mega-covers-heading" className="settings-h2">
+          Portadas de carpetas MEGA
+        </h2>
+        <p className="lead settings-sub-lead">
+          Recorre cada carpeta de primer nivel de la fuente activa, busca cómics
+          (<code>.cbz/.cbr/.zip/.rar</code>) en todo su subárbol, elige el archivo <strong>más
+          pequeño</strong> (suele ir mucho más rápido que un tomo grande), extrae la primera imagen
+          y descarga todo en un único <code>.zip</code> con nombres compatibles con{' '}
+          <code>url1…url6</code>. Puede tardar bastante; si MEGA corta la conexión, se reintenta
+          automáticamente.
+        </p>
+        <div className="settings-covers-actions">
+          <button type="button" onClick={() => void handleExportMegaCoversZip()} disabled={coverExportBusy}>
+            {coverExportBusy ? 'Exportando portadas…' : 'Exportar portadas de esta fuente'}
+          </button>
+        </div>
+        {coverExportBusy ? (
+          <div className="settings-covers-progress-block">
+            <div
+              className="settings-covers-progress-bar"
+              role="progressbar"
+              aria-valuenow={coverExportOverallPercent}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Progreso de exportación de portadas"
+              aria-valuetext={`${coverExportOverallPercent} por ciento`}
+            >
+              <div
+                className="settings-covers-progress-fill"
+                style={{ width: `${coverExportOverallPercent}%` }}
+              />
+            </div>
+            <div className="settings-covers-progress-percent" aria-hidden="true">
+              {coverExportOverallPercent}%
+            </div>
+          </div>
+        ) : null}
+        {coverExportProgress ? (
+          <p className="settings-covers-progress" role="status">
+            {coverExportProgress}
+          </p>
+        ) : null}
+        {coverExportMsg ? (
+          <p className="settings-toast" role="status">
+            {coverExportMsg}
+          </p>
+        ) : null}
+      </section>
+    ) : null
+
   return (
     <section className="panel settings-panel">
       {onCancel ? (
@@ -368,6 +489,7 @@ export function SettingsPanel({ onSaved, onCancel, initialSetup = false }: Props
       ) : null}
 
       {!fromEnv ? megaUrlSection : null}
+      {megaCoversSection}
 
       {cacheSection}
 

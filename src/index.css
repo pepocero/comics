@@ -236,6 +236,51 @@ code {
   border-color: var(--cr-open-border);
 }
 
+.settings-covers-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.settings-covers-progress-block {
+  margin: 0.85rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.settings-covers-progress-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--cr-border-strong);
+  border: 1px solid var(--cr-border-muted);
+  overflow: hidden;
+}
+
+.settings-covers-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--cr-btn-primary),
+    color-mix(in srgb, var(--cr-btn-primary) 75%, #7eb8ff)
+  );
+  transition: width 0.2s ease-out;
+}
+
+.settings-covers-progress-percent {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--cr-text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-covers-progress {
+  margin: 0.7rem 0 0;
+  font-size: 0.88rem;
+  color: var(--cr-text-soft);
+}
+
 .lead {
   color: var(--cr-text-dim);
   margin: 0 0 1.25rem;

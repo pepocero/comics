@@ -10,8 +10,13 @@ function sleep(ms: number): Promise<void> {
   })
 }
 
+export type MegaDownloadOptions = {
+  /** Límite 1…10. Por defecto 3 (descargas normales). Exportación masiva puede pedir más. */
+  maxAttempts?: number
+}
+
 /** Errores de red / servidor que a veces se resuelven reintentando (p. ej. net::ERR_CONNECTION_RESET). */
-function isTransientMegaDownloadFailure(err: unknown): boolean {
+export function isTransientMegaDownloadFailure(err: unknown): boolean {
   const s =
     err instanceof Error
       ? `${err.name} ${err.message}`
@@ -28,7 +33,8 @@ function isTransientMegaDownloadFailure(err: unknown): boolean {
     l.includes('load failed') ||
     l.includes('aborted') ||
     l.includes('err_connection') ||
-    l.includes('connection closed')
+    l.includes('connection closed') ||
+    l.includes('networkerror')
   )
 }
 
@@ -110,15 +116,17 @@ function downloadMegaFileToArrayBufferOnce(
 export async function downloadMegaFileToArrayBuffer(
   file: MegaFile,
   onProgress: (percent: number) => void,
+  options?: MegaDownloadOptions,
 ): Promise<ArrayBuffer> {
+  const maxAttempts = Math.max(1, Math.min(10, options?.maxAttempts ?? DOWNLOAD_ATTEMPTS))
   let lastErr: unknown
-  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       onProgress(0)
       return await downloadMegaFileToArrayBufferOnce(file, onProgress)
     } catch (e) {
       lastErr = e
-      if (attempt < DOWNLOAD_ATTEMPTS && isTransientMegaDownloadFailure(e)) {
+      if (attempt < maxAttempts && isTransientMegaDownloadFailure(e)) {
         await sleep(RETRY_BASE_MS * attempt)
         continue
       }
