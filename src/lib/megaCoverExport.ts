@@ -3,6 +3,8 @@ import { zipSync } from 'fflate'
 import { parseMegaFolderUrl } from './parseMegaFolderUrl'
 import {
   downloadMegaFileToArrayBuffer,
+  extractMegaBandwidthLimitSeconds,
+  isMegaBandwidthLimitReached,
   isTransientMegaDownloadFailure,
 } from './megaDownload'
 import { formatBytes } from './formatBytes'
@@ -42,6 +44,8 @@ export type MegaCoverExportResult = {
   okCount: number
   skippedCount: number
   errorCount: number
+  bandwidthLimitHitCount: number
+  maxBandwidthWaitSeconds: number | null
   report: string
 }
 
@@ -152,6 +156,8 @@ export async function exportMegaRootFolderCoversZip(
   let okCount = 0
   let skippedCount = 0
   let errorCount = 0
+  let bandwidthLimitHitCount = 0
+  let maxBandwidthWaitSeconds: number | null = null
 
   for (let i = 0; i < folders.length; i++) {
     const folder = folders[i]
@@ -218,6 +224,14 @@ export async function exportMegaRootFolderCoversZip(
           }
           break
         } catch (e) {
+          if (isMegaBandwidthLimitReached(e)) {
+            bandwidthLimitHitCount++
+            const secs = extractMegaBandwidthLimitSeconds(e)
+            if (secs !== null) {
+              maxBandwidthWaitSeconds =
+                maxBandwidthWaitSeconds === null ? secs : Math.max(maxBandwidthWaitSeconds, secs)
+            }
+          }
           if (attempt < COVER_EXPORT_FULL_ATTEMPTS && isTransientMegaDownloadFailure(e)) {
             await sleep(COVER_EXPORT_FULL_RETRY_BASE_MS * attempt)
             continue
@@ -276,6 +290,10 @@ export async function exportMegaRootFolderCoversZip(
     `OK: ${okCount}`,
     `Omitidas: ${skippedCount}`,
     `Errores: ${errorCount}`,
+    `Bloqueos por límite MEGA detectados: ${bandwidthLimitHitCount}`,
+    `Espera máxima sugerida por MEGA: ${
+      maxBandwidthWaitSeconds === null ? 'no indicada' : `${maxBandwidthWaitSeconds} s`
+    }`,
     '',
     ...lines,
     '',
@@ -312,5 +330,13 @@ export async function exportMegaRootFolderCoversZip(
     overallPercent: 100,
   })
 
-  return { zipBlob, okCount, skippedCount, errorCount, report }
+  return {
+    zipBlob,
+    okCount,
+    skippedCount,
+    errorCount,
+    bandwidthLimitHitCount,
+    maxBandwidthWaitSeconds,
+    report,
+  }
 }

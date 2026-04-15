@@ -15,14 +15,17 @@ export type MegaDownloadOptions = {
   maxAttempts?: number
 }
 
+function errText(err: unknown): string {
+  return err instanceof Error
+    ? `${err.name} ${err.message}`
+    : typeof err === 'string'
+      ? err
+      : String(err)
+}
+
 /** Errores de red / servidor que a veces se resuelven reintentando (p. ej. net::ERR_CONNECTION_RESET). */
 export function isTransientMegaDownloadFailure(err: unknown): boolean {
-  const s =
-    err instanceof Error
-      ? `${err.name} ${err.message}`
-      : typeof err === 'string'
-        ? err
-        : String(err)
+  const s = errText(err)
   const l = s.toLowerCase()
   return (
     l.includes('reset') ||
@@ -36,6 +39,50 @@ export function isTransientMegaDownloadFailure(err: unknown): boolean {
     l.includes('connection closed') ||
     l.includes('networkerror')
   )
+}
+
+export function isMegaBandwidthLimitReached(err: unknown): boolean {
+  const l = errText(err).toLowerCase()
+  return (
+    l.includes('bandwidth limit reached') ||
+    l.includes('limit reached') ||
+    l.includes('509 status code')
+  )
+}
+
+export function extractMegaBandwidthLimitSeconds(err: unknown): number | null {
+  const s = errText(err)
+  const patterns = [
+    /bandwidth limit reached:\s*(\d+)\s*seconds?/i,
+    /(\d+)\s*seconds?\s*until/i,
+    /time-left[^\d]*(\d+)/i,
+  ]
+  for (const p of patterns) {
+    const m = s.match(p)
+    if (!m) continue
+    const n = Number.parseInt(m[1], 10)
+    if (Number.isFinite(n) && n >= 0) return n
+  }
+  return null
+}
+
+function formatSecondsAsEsDuration(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  if (h > 0) return `${h} h ${m} min`
+  if (m > 0) return `${m} min`
+  return `${s} s`
+}
+
+/** Mensaje amigable para UI cuando MEGA bloquea por cuota temporal. */
+export function megaBandwidthLimitAlertMessage(err: unknown): string | null {
+  if (!isMegaBandwidthLimitReached(err)) return null
+  const secs = extractMegaBandwidthLimitSeconds(err)
+  if (secs === null) {
+    return 'MEGA alcanzó el límite temporal de descarga para esta IP. Espera un rato e inténtalo de nuevo.'
+  }
+  return `MEGA alcanzó el límite temporal de descarga para esta IP. Tiempo estimado para reintentar: ${formatSecondsAsEsDuration(secs)}.`
 }
 
 /**

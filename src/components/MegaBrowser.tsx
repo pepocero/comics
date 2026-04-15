@@ -1,4 +1,4 @@
-import { File as MegaFile } from 'megajs'
+import { API as MegaApi, File as MegaFile } from 'megajs'
 import {
   useCallback,
   useEffect,
@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { flushSync } from 'react-dom'
 import { parseMegaFolderUrl } from '../lib/parseMegaFolderUrl'
-import { downloadMegaFileToArrayBuffer } from '../lib/megaDownload'
+import { downloadMegaFileToArrayBuffer, megaBandwidthLimitAlertMessage } from '../lib/megaDownload'
 import { formatBytes } from '../lib/formatBytes'
 import { loadViewerPagesFromMegaCache, type CachedComicMeta } from '../lib/megaCachedViewer'
 import {
@@ -37,6 +37,7 @@ import type { ViewerPage } from './ComicViewer'
 import type { LocalComicOpenPayload } from './LocalComicOpenButton'
 import { LocalComicOpenButton } from './LocalComicOpenButton'
 import { MegaRootFolderCards } from './MegaRootFolderCards'
+import { getConfiguredMegaSources } from '../config/megaSettings'
 
 type Props = {
   megaFolderUrl: string
@@ -171,6 +172,65 @@ function megaBreadcrumbScrollKey(megaFolderUrl: string, crumbs: MegaFile[]): str
   return `${u}|${ids}`
 }
 
+function rootVisibleFolderNames(node: MegaFile): string[] {
+  const kids = node.children ?? []
+  return kids
+    .filter((f) => f.directory && !isMegaSeparatorPlaceholderFolder(f.name))
+    .map((f) => f.name || '(sin nombre)')
+}
+
+async function loadMegaRootFresh(megaFolderUrl: string): Promise<MegaFile> {
+  // API nueva para evitar estado/cache en memoria de una sesión previa.
+  const api = new MegaApi(false)
+  const node = (await MegaFile.fromURL(megaFolderUrl, { api }).loadAttributes()) as MegaFile
+  return node
+}
+
+function countRootDirs(node: MegaFile): number {
+  if (!node.directory) return 0
+  return (node.children ?? []).filter((c) => c.directory).length
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
+/**
+ * En algunos momentos MEGA puede devolver snapshots distintos entre llamadas cercanas.
+ * Hacemos varias lecturas frescas y nos quedamos con la que reporta más carpetas en raíz.
+ */
+async function loadMegaRootFreshBestEffort(
+  megaFolderUrl: string,
+  attempts = 3,
+): Promise<MegaFile> {
+  let best: MegaFile | null = null
+  let bestCount = -1
+  let lastErr: unknown = null
+
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const n = await loadMegaRootFresh(megaFolderUrl)
+      const c = countRootDirs(n)
+      if (!best || c > bestCount) {
+        best = n
+        bestCount = c
+      }
+    } catch (e) {
+      lastErr = e
+    }
+    if (i + 1 < attempts) {
+      // breve pausa para evitar pegar al mismo edge-cache inmediatamente
+      // eslint-disable-next-line no-await-in-loop -- intentos secuenciales deliberados
+      await sleepMs(700)
+    }
+  }
+
+  if (best) return best
+  throw (lastErr instanceof Error ? lastErr : new Error(String(lastErr || 'No se pudo cargar MEGA.')))
+}
+
 export function MegaBrowser({
   megaFolderUrl,
   onOpenSettings,
@@ -199,21 +259,36 @@ export function MegaBrowser({
   const [librarySearchDraft, setLibrarySearchDraft] = useState('')
   const [librarySearchCommitted, setLibrarySearchCommitted] = useState('')
   const [librarySearchScope, setLibrarySearchScope] = useState<MegaLibrarySearchScope>('all')
+  const [librarySearchVisible, setLibrarySearchVisible] = useState(false)
   /** Al bajar el scroll se pliega el bloque de búsqueda para ganar espacio al listado. */
   const [librarySearchBarCollapsed, setLibrarySearchBarCollapsed] = useState(false)
+  const [refreshingTree, setRefreshingTree] = useState(false)
   const lastScrollYRef = useRef(0)
   const scrollDownAccumRef = useRef(0)
   const scrollUpAccumRef = useRef(0)
   const scrollYByBreadcrumbKeyRef = useRef<Map<string, number>>(new Map())
   const prevBreadcrumbDepthRef = useRef(0)
+  const breadcrumbsRef = useRef<MegaFile[]>([])
 
   const current = breadcrumbs[breadcrumbs.length - 1] ?? null
   const entries = current?.directory ? visibleSortedEntries(current) : []
+  const atRoot = breadcrumbs.length === 1
+
+  useEffect(() => {
+    breadcrumbsRef.current = breadcrumbs
+  }, [breadcrumbs])
 
   const favoriteIdSet = useMemo(
     () => new Set(getMegaFavorites().map((f) => f.fileId)),
     [favBump],
   )
+  const sourceLabel = useMemo(() => {
+    const src = getConfiguredMegaSources().find(
+      (s) =>
+        normalizeMegaFolderUrlForCompare(s.url) === normalizeMegaFolderUrlForCompare(megaFolderUrl),
+    )
+    return src?.label ?? 'Fuente actual'
+  }, [megaFolderUrl])
 
   const searchHits = useMemo(() => {
     if (!root || !librarySearchCommitted.trim()) return []
@@ -232,51 +307,97 @@ export function MegaBrowser({
     refreshCacheInfo()
   }, [refreshCacheInfo])
 
-  useEffect(() => {
-    let cancelled = false
-    const parsed = parseMegaFolderUrl(megaFolderUrl)
-    if (!parsed.ok) {
-      setLoadError(parsed.error)
-      setLoadingTree(false)
-      return
-    }
+  const reloadTreeFromMega = useCallback(
+    async (keepCurrentPath: boolean, showRefreshSummary = false) => {
+      const parsed = parseMegaFolderUrl(megaFolderUrl)
+      if (!parsed.ok) {
+        setLoadError(parsed.error)
+        setLoadingTree(false)
+        return
+      }
 
-    setLoadError(null)
-    setLoadingTree(true)
-    scrollYByBreadcrumbKeyRef.current.clear()
-    prevBreadcrumbDepthRef.current = 0
-    setRoot(null)
-    setBreadcrumbs([])
-    setLibrarySearchDraft('')
-    setLibrarySearchCommitted('')
-    setLibrarySearchBarCollapsed(false)
-
-    const file = MegaFile.fromURL(parsed.url)
-    file
-      .loadAttributes()
-      .then((node) => {
-        if (cancelled) return
-        const r = node as MegaFile
-        if (!r.directory) {
-          setLoadError('El enlace no es válido.')
-          setLoadingTree(false)
+      const pathLabels = keepCurrentPath
+        ? breadcrumbsRef.current.slice(1).map((b) => b.name || '')
+        : []
+      if (!keepCurrentPath) {
+        setLoadError(null)
+        setLoadingTree(true)
+        scrollYByBreadcrumbKeyRef.current.clear()
+        prevBreadcrumbDepthRef.current = 0
+        setRoot(null)
+        setBreadcrumbs([])
+        setLibrarySearchDraft('')
+        setLibrarySearchCommitted('')
+        setLibrarySearchVisible(false)
+        setLibrarySearchBarCollapsed(false)
+      }
+      setRefreshingTree(true)
+      try {
+        const fresh = await loadMegaRootFreshBestEffort(parsed.url, keepCurrentPath ? 2 : 4)
+        if (!fresh.directory) {
+          if (!keepCurrentPath) {
+            setLoadError('El enlace no es válido.')
+          } else {
+            setToast('No se pudo actualizar la carpeta desde MEGA.')
+          }
           return
         }
-        setRoot(r)
-        setBreadcrumbs([r])
-        setLoadingTree(false)
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return
-        const msg = err instanceof Error ? err.message : String(err)
-        setLoadError(msg || 'No se pudo cargar el contenido.')
-        setLoadingTree(false)
-      })
 
-    return () => {
-      cancelled = true
-    }
-  }, [megaFolderUrl])
+        const trail: MegaFile[] = [fresh]
+        let cursor: MegaFile = fresh
+        for (const label of pathLabels) {
+          const kids = visibleSortedEntries(cursor).filter((f) => f.directory)
+          const next = kids.find((f) => (f.name || '') === label)
+          if (!next) break
+          trail.push(next)
+          cursor = next
+        }
+
+        setLoadError(null)
+        setRoot(fresh)
+        setBreadcrumbs(trail)
+        if (showRefreshSummary) {
+          const rawKids = fresh.children ?? []
+          const rawDirCount = rawKids.filter((f) => f.directory).length
+          const visibleDirCount = visibleSortedEntries(fresh).filter((f) => f.directory).length
+          const hiddenByFilter = Math.max(0, rawDirCount - visibleDirCount)
+          const visibleNames = rootVisibleFolderNames(fresh)
+          console.info('[ComicRead][MEGA root refresh]', {
+            rawDirCount,
+            visibleDirCount,
+            hiddenByFilter,
+            visibleNames,
+          })
+          if (hiddenByFilter > 0) {
+            setToast(
+              `MEGA devolvió ${rawDirCount} carpeta(s) en raíz; se muestran ${visibleDirCount}. ${hiddenByFilter} ocultada(s) por filtros.`,
+            )
+          } else {
+            setToast(
+              `MEGA devolvió ${rawDirCount} carpeta(s) en raíz. Nombres: ${visibleNames.join(' | ')}`,
+            )
+          }
+        } else if (keepCurrentPath) {
+          setToast('Carpeta actualizada desde MEGA.')
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        if (!keepCurrentPath) {
+          setLoadError(msg || 'No se pudo cargar el contenido.')
+        } else {
+          setToast(msg || 'No se pudo actualizar la carpeta desde MEGA.')
+        }
+      } finally {
+        if (!keepCurrentPath) setLoadingTree(false)
+        setRefreshingTree(false)
+      }
+    },
+    [megaFolderUrl],
+  )
+
+  useEffect(() => {
+    void reloadTreeFromMega(false)
+  }, [reloadTreeFromMega])
 
   useLayoutEffect(() => {
     if (!root || loadingTree || loadError) return
@@ -316,6 +437,13 @@ export function MegaBrowser({
       }
       const maxScroll = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight)
       const atBottom = y >= maxScroll - 2
+      const nearBottom = maxScroll - y <= 96
+      if (nearBottom) {
+        // Evita oscilaciones en el borde inferior (efecto persiana).
+        scrollDownAccumRef.current = 0
+        scrollUpAccumRef.current = 0
+        return
+      }
 
       if (Math.abs(dy) < 0.5) return
 
@@ -407,6 +535,14 @@ export function MegaBrowser({
     setLibrarySearchDraft('')
     setLibrarySearchCommitted('')
   }, [])
+
+  const toggleLibrarySearchVisible = useCallback(() => {
+    setLibrarySearchVisible((prev) => {
+      const next = !prev
+      if (!next) clearLibrarySearch()
+      return next
+    })
+  }, [clearLibrarySearch])
 
   /** Incluye la ✕ nativa de `type="search"`: al vaciar el cuadro se quita también la búsqueda aplicada. */
   const onLibrarySearchDraftChange = useCallback((value: string) => {
@@ -518,6 +654,11 @@ export function MegaBrowser({
         refreshCacheInfo()
         setToast('Descarga guardada. Ábrela en «Descargas» en el menú lateral.')
       } catch (err: unknown) {
+        const quotaAlert = megaBandwidthLimitAlertMessage(err)
+        if (quotaAlert) {
+          setToast(quotaAlert)
+          return
+        }
         const msg = err instanceof Error ? err.message : String(err)
         setToast(msg || 'Error al descargar el archivo.')
       } finally {
@@ -618,7 +759,6 @@ export function MegaBrowser({
     return null
   }
 
-  const atRoot = breadcrumbs.length === 1
   const folderEntries = entries.filter((f) => f.directory)
   const fileEntries = entries.filter((f) => !f.directory)
   const searchActive = librarySearchCommitted.trim().length > 0
@@ -634,73 +774,127 @@ export function MegaBrowser({
         </div>
       ) : null}
 
-      <div
-        className={`mega-library-search-wrap${librarySearchBarCollapsed ? ' mega-library-search-wrap--collapsed' : ''}`}
-        onFocusCapture={() => setLibrarySearchBarCollapsed(false)}
-      >
-      <div className="mega-library-search" role="search">
-        <form className="mega-library-search-form" onSubmit={submitLibrarySearch}>
-          <label className="mega-library-search-label-block" htmlFor="mega-library-search-input">
-            Buscar en toda la biblioteca
-            <div className="mega-library-search-input-row">
-              <input
-                id="mega-library-search-input"
-                type="search"
-                value={librarySearchDraft}
-                onChange={(e) => onLibrarySearchDraftChange(e.target.value)}
-                placeholder="Nombre de carpeta o archivo (p. ej. Spiderman)…"
-                autoComplete="off"
-                spellCheck={false}
-                aria-describedby={
-                  searchActive
-                    ? 'mega-library-search-hint mega-library-search-scope-legend'
-                    : 'mega-library-search-scope-legend'
-                }
-              />
-              <button type="submit" className="mega-library-search-submit">
-                Buscar
-              </button>
-            </div>
-          </label>
-          <fieldset className="mega-library-search-scope">
-            <legend id="mega-library-search-scope-legend" className="mega-library-search-scope-legend">
-              Buscar en
-            </legend>
-            <div className="mega-library-search-scope-options" role="radiogroup" aria-label="Tipo de resultado">
-              {(
-                [
-                  { value: 'all' as const, label: 'Todo' },
-                  { value: 'folders' as const, label: 'Carpetas' },
-                  { value: 'files' as const, label: 'Archivos' },
-                ] as const
-              ).map(({ value, label }) => (
-                <label key={value} className="mega-library-search-scope-option">
+      <div className="mega-library-head">
+        <div className="mega-library-head-titles">
+          <h1 className="mega-library-title">Biblioteca MEGA</h1>
+          <p className="mega-library-subtitle">{sourceLabel}</p>
+        </div>
+        <button type="button" className="mega-library-search-toggle" onClick={toggleLibrarySearchVisible}>
+          {librarySearchVisible ? 'Ocultar buscador' : 'Buscar'}
+        </button>
+      </div>
+
+      {librarySearchVisible ? (
+        <div
+          className={`mega-library-search-wrap${librarySearchBarCollapsed ? ' mega-library-search-wrap--collapsed' : ''}`}
+          onFocusCapture={() => setLibrarySearchBarCollapsed(false)}
+        >
+          <div className="mega-library-search" role="search">
+            <form className="mega-library-search-form" onSubmit={submitLibrarySearch}>
+              <label className="mega-library-search-label-block" htmlFor="mega-library-search-input">
+                Buscar en toda la biblioteca
+                <div className="mega-library-search-input-row">
                   <input
-                    type="radio"
-                    name="mega-library-search-scope"
-                    value={value}
-                    checked={librarySearchScope === value}
-                    onChange={() => setLibrarySearchScope(value)}
+                    id="mega-library-search-input"
+                    type="search"
+                    value={librarySearchDraft}
+                    onChange={(e) => onLibrarySearchDraftChange(e.target.value)}
+                    placeholder="Nombre de carpeta o archivo (p. ej. Spiderman)…"
+                    autoComplete="off"
+                    spellCheck={false}
+                    aria-describedby={
+                      searchActive
+                        ? 'mega-library-search-hint mega-library-search-scope-legend'
+                        : 'mega-library-search-scope-legend'
+                    }
                   />
-                  <span>{label}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        </form>
-        {searchActive ? (
-          <p id="mega-library-search-hint" className="mega-library-search-meta">
-            {`${searchHits.length} resultado${searchHits.length === 1 ? '' : 's'} · «${librarySearchCommitted.trim()}» · ${
-              librarySearchScope === 'folders'
-                ? 'solo carpetas'
-                : librarySearchScope === 'files'
-                  ? 'solo archivos'
-                  : 'carpetas y archivos'
-            }`}
-          </p>
-        ) : null}
-      </div>
-      </div>
+                  <button type="submit" className="mega-library-search-submit">
+                    Buscar
+                  </button>
+                </div>
+              </label>
+              <fieldset className="mega-library-search-scope">
+                <legend id="mega-library-search-scope-legend" className="mega-library-search-scope-legend">
+                  Buscar en
+                </legend>
+                <div
+                  className="mega-library-search-scope-options"
+                  role="radiogroup"
+                  aria-label="Tipo de resultado"
+                >
+                  {(
+                    [
+                      { value: 'all' as const, label: 'Todo' },
+                      { value: 'folders' as const, label: 'Carpetas' },
+                      { value: 'files' as const, label: 'Archivos' },
+                    ] as const
+                  ).map(({ value, label }) => (
+                    <label key={value} className="mega-library-search-scope-option">
+                      <input
+                        type="radio"
+                        name="mega-library-search-scope"
+                        value={value}
+                        checked={librarySearchScope === value}
+                        onChange={() => setLibrarySearchScope(value)}
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </form>
+            {searchActive ? (
+              <p id="mega-library-search-hint" className="mega-library-search-meta">
+                {`${searchHits.length} resultado${searchHits.length === 1 ? '' : 's'} · «${librarySearchCommitted.trim()}» · ${
+                  librarySearchScope === 'folders'
+                    ? 'solo carpetas'
+                    : librarySearchScope === 'files'
+                      ? 'solo archivos'
+                      : 'carpetas y archivos'
+                }`}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {!searchActive && breadcrumbs.length > 1 ? (
+        <div className="folder-up-row folder-up-row--with-up">
+          <button
+            type="button"
+            className="folder-up-btn"
+            onClick={goUp}
+            disabled={refreshingTree}
+            aria-label="Subir un nivel de carpeta"
+            title="Subir un nivel"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            className="folder-refresh-btn"
+            onClick={() => void reloadTreeFromMega(true, true)}
+            disabled={refreshingTree}
+            aria-label="Actualizar carpeta actual desde MEGA"
+            title="Actualizar carpeta"
+          >
+            {refreshingTree ? 'Actualizando…' : 'Actualizar carpeta'}
+          </button>
+        </div>
+      ) : !searchActive ? (
+        <div className="folder-up-row">
+          <button
+            type="button"
+            className="folder-refresh-btn"
+            onClick={() => void reloadTreeFromMega(false, true)}
+            disabled={refreshingTree}
+            aria-label="Actualizar fuente MEGA desde raíz"
+            title="Actualizar carpeta"
+          >
+            {refreshingTree ? 'Actualizando…' : 'Actualizar carpeta'}
+          </button>
+        </div>
+      ) : null}
 
       {!searchActive && atRoot && folderEntries.length > 0 ? (
         <MegaRootFolderCards
@@ -709,20 +903,6 @@ export function MegaBrowser({
           disabled={!!downloadingName || !!openingCacheId}
           onOpenFolder={enterFolder}
         />
-      ) : null}
-
-      {!searchActive && breadcrumbs.length > 1 ? (
-        <div className="folder-up-row">
-          <button
-            type="button"
-            className="folder-up-btn"
-            onClick={goUp}
-            aria-label="Subir un nivel de carpeta"
-            title="Subir un nivel"
-          >
-            ↑
-          </button>
-        </div>
       ) : null}
 
       {searchActive ? (

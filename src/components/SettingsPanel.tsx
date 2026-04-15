@@ -377,8 +377,16 @@ export function SettingsPanel({
       a.click()
       URL.revokeObjectURL(blobUrl)
 
+      const quotaSuffix =
+        result.bandwidthLimitHitCount > 0
+          ? ` Aviso: MEGA bloqueó por límite ${result.bandwidthLimitHitCount} vez/veces${
+              result.maxBandwidthWaitSeconds === null
+                ? '.'
+                : ` (espera sugerida máxima: ${Math.ceil(result.maxBandwidthWaitSeconds / 60)} min).`
+            }`
+          : ''
       setCoverExportMsg(
-        `Exportación terminada: ${result.okCount} portada(s), ${result.skippedCount} omitida(s), ${result.errorCount} error(es). Se descargó ${filename}.`,
+        `Exportación terminada: ${result.okCount} portada(s), ${result.skippedCount} omitida(s), ${result.errorCount} error(es). Se descargó ${filename}.${quotaSuffix}`,
       )
       setCoverExportOverallPercent(100)
       setCoverExportProgress('Completado.')
