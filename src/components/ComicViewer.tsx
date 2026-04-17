@@ -100,6 +100,8 @@ function ComicPageCanvas({
 
   /** Quita listeners globales de arrastre (ratón/lápiz); evita estado colgado con setPointerCapture. */
   const pointerDragCleanupRef = useRef<(() => void) | null>(null)
+  const capturedPointerIdsRef = useRef<Set<number>>(new Set())
+  const lastPointerMoveAtRef = useRef(0)
 
   /** Refs de lectura para gestos; sincronizados desde `view` (una sola fuente de verdad). */
   const panRef = useRef({ x: 0, y: 0 })
@@ -113,7 +115,11 @@ function ComicPageCanvas({
   const releaseAllPointerCaptureOnStage = useCallback(() => {
     const stage = stageRef.current
     if (!stage) return
-    for (let pid = 0; pid <= 32; pid++) {
+    const ids = new Set<number>(capturedPointerIdsRef.current)
+    if (dragRef.current?.pointerId != null) {
+      ids.add(dragRef.current.pointerId)
+    }
+    for (const pid of ids) {
       try {
         if (stage.hasPointerCapture(pid)) {
           stage.releasePointerCapture(pid)
@@ -122,6 +128,7 @@ function ComicPageCanvas({
         /* ignore */
       }
     }
+    capturedPointerIdsRef.current.clear()
   }, [])
 
   /** Solo el arrastre con puntero (ratón/lápiz/táctil); no borra pinch ni touchPan legacy. */
@@ -253,6 +260,7 @@ function ComicPageCanvas({
 
       const pid = e.pointerId
       const p = panRef.current
+      lastPointerMoveAtRef.current = Date.now()
       dragRef.current = {
         active: true,
         startX: e.clientX,
@@ -265,6 +273,7 @@ function ComicPageCanvas({
 
       try {
         stage.setPointerCapture(pid)
+        capturedPointerIdsRef.current.add(pid)
       } catch {
         /* ignore */
       }
@@ -273,6 +282,7 @@ function ComicPageCanvas({
         if (ev.pointerId !== pid) return
         const d = dragRef.current
         if (!d?.active) return
+        lastPointerMoveAtRef.current = Date.now()
         const dx = ev.clientX - d.startX
         const dy = ev.clientY - d.startY
         const nx = d.panStartX + dx
@@ -285,6 +295,8 @@ function ComicPageCanvas({
         stage.removeEventListener('pointermove', move)
         stage.removeEventListener('pointerup', up)
         stage.removeEventListener('pointercancel', up)
+        window.removeEventListener('pointerup', up)
+        window.removeEventListener('pointercancel', up)
       }
 
       function up(ev: PointerEvent): void {
@@ -297,6 +309,9 @@ function ComicPageCanvas({
       stage.addEventListener('pointermove', move)
       stage.addEventListener('pointerup', up)
       stage.addEventListener('pointercancel', up)
+      // Respaldo por si el navegador deja de reenviar eventos al stage tras wheel/zoom.
+      window.addEventListener('pointerup', up)
+      window.addEventListener('pointercancel', up)
     },
     [releasePointerDragOnly],
   )
@@ -439,6 +454,23 @@ function ComicPageCanvas({
       document.body.style.cursor = prev
     }
   }, [dragging])
+
+  /**
+   * Autorrecovery silencioso para escritorio:
+   * si el arrastre queda "enganchado" (sin pointerup), se libera solo.
+   */
+  useEffect(() => {
+    if (!dragging) return
+    const timer = window.setInterval(() => {
+      const d = dragRef.current
+      if (!d?.active) return
+      const idleMs = Date.now() - lastPointerMoveAtRef.current
+      if (idleMs < 1300) return
+      // Si no hubo movimiento suficiente tiempo, liberamos el drag para evitar bloqueo del paneo.
+      releasePointerDragOnly()
+    }, 220)
+    return () => window.clearInterval(timer)
+  }, [dragging, releasePointerDragOnly])
 
   /** Pérdida de foco / pestaña: evita puntero “fantasma” a medio arrastre */
   useEffect(() => {

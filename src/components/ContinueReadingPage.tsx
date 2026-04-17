@@ -12,7 +12,7 @@ export function ContinueReadingPage({ items, busyId, onContinue, onForget }: Pro
   return (
     <div className="continue-page panel">
       <h1 className="continue-page-title">Seguir leyendo</h1>
-      <p className="lead">
+      <p className="lead continue-page-lead-box">
         Aquí aparecen todos los cómics con progreso guardado. Puedes tener varios en paralelo y
         continuar el que quieras; cada uno recuerda la página donde lo dejaste.
       </p>

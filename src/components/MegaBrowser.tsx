@@ -295,8 +295,8 @@ export function MegaBrowser({
     return collectSearchHits(root, librarySearchCommitted.trim(), librarySearchScope)
   }, [root, librarySearchCommitted, librarySearchScope])
 
-  const refreshCacheInfo = useCallback(() => {
-    void listCachedComicMeta().then((rows) => {
+  const refreshCacheInfo = useCallback((): Promise<void> => {
+    return listCachedComicMeta().then((rows) => {
       const sorted = [...rows].sort((a, b) => b.downloadedAt - a.downloadedAt)
       setCachedRows(sorted)
       setCachedIdSet(new Set(rows.map((r) => r.id)))
@@ -472,49 +472,6 @@ export function MegaBrowser({
     return () => window.removeEventListener('scroll', onScroll)
   }, [root, loadingTree, loadError, librarySearchBarCollapsed])
 
-  useEffect(() => {
-    if (!root || loadingTree || loadError) return
-    const target = libraryNavTarget
-    if (!target) return
-    if (normalizeMegaFolderUrlForCompare(target.megaFolderUrl) !== normalizeMegaFolderUrlForCompare(megaFolderUrl)) {
-      onLibraryNavTargetConsumed?.()
-      return
-    }
-
-    let trail: MegaFile[] = [root]
-    let folder: MegaFile = root
-    for (const label of target.pathLabels) {
-      const kids = visibleSortedEntries(folder).filter((f) => f.directory)
-      const next = kids.find((f) => (f.name || '') === label)
-      if (!next) {
-        setToast('No se encontró la carpeta del favorito. Puede haber cambiado en MEGA.')
-        onLibraryNavTargetConsumed?.()
-        return
-      }
-      trail.push(next)
-      folder = next
-    }
-    flushSync(() => {
-      setBreadcrumbs(trail)
-    })
-    const navScrollEl = document.scrollingElement ?? document.documentElement
-    navScrollEl.scrollTop = 0
-
-    const filesHere = visibleSortedEntries(folder).filter((f) => !f.directory)
-    const found = filesHere.some((f) => megaFileCacheId(f) === target.fileId)
-    if (!found) {
-      setToast('El archivo del favorito no aparece en esta carpeta.')
-    }
-    onLibraryNavTargetConsumed?.()
-  }, [
-    root,
-    loadingTree,
-    loadError,
-    libraryNavTarget,
-    megaFolderUrl,
-    onLibraryNavTargetConsumed,
-  ])
-
   const enterFolder = useCallback(
     (folder: MegaFile) => {
       setBreadcrumbs((prev) => {
@@ -603,75 +560,13 @@ export function MegaBrowser({
     [breadcrumbs, favoriteIdSet, megaFolderUrl, onFavoritesChanged],
   )
 
-  /** Descarga y guarda en caché; el visor se abre desde Descargas en el menú lateral. */
-  const downloadArchiveToCache = useCallback(
-    async (file: MegaFile) => {
-      const name = file.name || 'cómic'
-      const allowed = isMegaLibraryListableFile(name)
-      if (!allowed) {
-        setToast('Este tipo de archivo no se puede descargar desde aquí.')
-        return
-      }
-
-      const id = megaFileCacheId(file)
-      if (cachedIdSet.has(id)) {
-        setToast('Este archivo ya está en Descargas. Ábrelo desde el menú «Descargas».')
-        return
-      }
-
-      setDownloadingName(name)
-      setToast(null)
-
-      try {
-        setDownloadProgress({ name, percent: 0 })
-        const buffer = await downloadMegaFileToArrayBuffer(file, (percent) => {
-          setDownloadProgress({ name, percent })
-        })
-
-        const byteLength = buffer.byteLength
-        const size = file.size != null ? file.size : byteLength
-        if (file.size != null && byteLength !== file.size) {
-          throw new Error(
-            `Tamaño incorrecto (esperado ${file.size} B, recibido ${byteLength} B).`,
-          )
-        }
-
-        await putCachedComic({
-          id,
-          megaNodeId: file.nodeId ?? '',
-          name,
-          size,
-          downloadedAt: Date.now(),
-          data: buffer,
-        })
-
-        const verified = await verifyCachedComicBytes(id, byteLength)
-        if (!verified) {
-          await deleteCachedComic(id).catch(() => {})
-          throw new Error('No se pudo verificar el archivo guardado. Inténtalo de nuevo.')
-        }
-
-        refreshCacheInfo()
-        setToast('Descarga guardada. Ábrela en «Descargas» en el menú lateral.')
-      } catch (err: unknown) {
-        const quotaAlert = megaBandwidthLimitAlertMessage(err)
-        if (quotaAlert) {
-          setToast(quotaAlert)
-          return
-        }
-        const msg = err instanceof Error ? err.message : String(err)
-        setToast(msg || 'Error al descargar el archivo.')
-      } finally {
-        setDownloadProgress(null)
-        setDownloadingName(null)
-      }
-    },
-    [cachedIdSet, onFavoritesChanged, refreshCacheInfo],
-  )
-
   const openComicFromCache = useCallback(
     async (cacheId: string) => {
-      const meta = cachedRows.find((r) => r.id === cacheId)
+      let meta: CachedComicMeta | undefined = cachedRows.find((r) => r.id === cacheId)
+      if (!meta) {
+        const rows = await listCachedComicMeta()
+        meta = rows.find((r) => r.id === cacheId)
+      }
       if (!meta) {
         setToast('No se encontró el archivo en el dispositivo. Actualiza la lista.')
         void refreshCacheInfo()
@@ -728,6 +623,140 @@ export function MegaBrowser({
     [cachedRows, onOpenComic, refreshCacheInfo],
   )
 
+  /** Descarga y guarda en caché; con `openInViewer` abre al terminar (p. ej. favoritos). */
+  const downloadArchiveToCache = useCallback(
+    async (file: MegaFile, options?: { openInViewer?: boolean }) => {
+      const name = file.name || 'cómic'
+      const allowed = isMegaLibraryListableFile(name)
+      if (!allowed) {
+        setToast('Este tipo de archivo no se puede descargar desde aquí.')
+        return
+      }
+
+      const id = megaFileCacheId(file)
+      if (cachedIdSet.has(id)) {
+        if (options?.openInViewer) {
+          await openComicFromCache(id)
+        } else {
+          setToast('Este archivo ya está en Descargas. Ábrelo desde el menú «Descargas».')
+        }
+        return
+      }
+
+      setDownloadingName(name)
+      setToast(null)
+
+      try {
+        setDownloadProgress({ name, percent: 0 })
+        const buffer = await downloadMegaFileToArrayBuffer(file, (percent) => {
+          setDownloadProgress({ name, percent })
+        })
+
+        const byteLength = buffer.byteLength
+        const size = file.size != null ? file.size : byteLength
+        if (file.size != null && byteLength !== file.size) {
+          throw new Error(
+            `Tamaño incorrecto (esperado ${file.size} B, recibido ${byteLength} B).`,
+          )
+        }
+
+        await putCachedComic({
+          id,
+          megaNodeId: file.nodeId ?? '',
+          name,
+          size,
+          downloadedAt: Date.now(),
+          data: buffer,
+        })
+
+        const verified = await verifyCachedComicBytes(id, byteLength)
+        if (!verified) {
+          await deleteCachedComic(id).catch(() => {})
+          throw new Error('No se pudo verificar el archivo guardado. Inténtalo de nuevo.')
+        }
+
+        await refreshCacheInfo()
+        if (options?.openInViewer) {
+          await openComicFromCache(id)
+          setToast(null)
+        } else {
+          setToast('Descarga guardada. Ábrela en «Descargas» en el menú lateral.')
+        }
+      } catch (err: unknown) {
+        const quotaAlert = megaBandwidthLimitAlertMessage(err)
+        if (quotaAlert) {
+          setToast(quotaAlert)
+          return
+        }
+        const msg = err instanceof Error ? err.message : String(err)
+        setToast(msg || 'Error al descargar el archivo.')
+      } finally {
+        setDownloadProgress(null)
+        setDownloadingName(null)
+      }
+    },
+    [cachedIdSet, openComicFromCache, refreshCacheInfo],
+  )
+
+  useEffect(() => {
+    if (!root || loadingTree || loadError) return
+    const target = libraryNavTarget
+    if (!target) return
+    if (
+      normalizeMegaFolderUrlForCompare(target.megaFolderUrl) !==
+      normalizeMegaFolderUrlForCompare(megaFolderUrl)
+    ) {
+      onLibraryNavTargetConsumed?.()
+      return
+    }
+
+    let trail: MegaFile[] = [root]
+    let folder: MegaFile = root
+    for (const label of target.pathLabels) {
+      const kids = visibleSortedEntries(folder).filter((f) => f.directory)
+      const next = kids.find((f) => (f.name || '') === label)
+      if (!next) {
+        setToast('No se encontró la carpeta del favorito. Puede haber cambiado en MEGA.')
+        onLibraryNavTargetConsumed?.()
+        return
+      }
+      trail.push(next)
+      folder = next
+    }
+    setBreadcrumbs(trail)
+    const navScrollEl = document.scrollingElement ?? document.documentElement
+    navScrollEl.scrollTop = 0
+
+    const filesHere = visibleSortedEntries(folder).filter((f) => !f.directory)
+    const file = filesHere.find((f) => megaFileCacheId(f) === target.fileId)
+    if (!file) {
+      setToast('El archivo del favorito no aparece en esta carpeta.')
+      onLibraryNavTargetConsumed?.()
+      return
+    }
+
+    onLibraryNavTargetConsumed?.()
+
+    if (target.openComic === true) {
+      const id = target.fileId
+      if (cachedIdSet.has(id)) {
+        void openComicFromCache(id)
+      } else {
+        void downloadArchiveToCache(file, { openInViewer: true })
+      }
+    }
+  }, [
+    root,
+    loadingTree,
+    loadError,
+    libraryNavTarget,
+    megaFolderUrl,
+    onLibraryNavTargetConsumed,
+    cachedIdSet,
+    openComicFromCache,
+    downloadArchiveToCache,
+  ])
+
   if (loadingTree) {
     return (
       <div className="panel mega-browser-panel">
@@ -776,8 +805,7 @@ export function MegaBrowser({
 
       <div className="mega-library-head">
         <div className="mega-library-head-titles">
-          <h1 className="mega-library-title">Biblioteca MEGA</h1>
-          <p className="mega-library-subtitle">{sourceLabel}</p>
+          <h1 className="mega-library-title">{sourceLabel}</h1>
         </div>
         <button type="button" className="mega-library-search-toggle" onClick={toggleLibrarySearchVisible}>
           {librarySearchVisible ? 'Ocultar buscador' : 'Buscar'}

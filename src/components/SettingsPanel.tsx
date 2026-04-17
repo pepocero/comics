@@ -410,7 +410,7 @@ export function SettingsPanel({
           (<code>.cbz/.cbr/.zip/.rar</code>) en todo su subárbol, elige el archivo <strong>más
           pequeño</strong> (suele ir mucho más rápido que un tomo grande), extrae la primera imagen
           y descarga todo en un único <code>.zip</code> con nombres compatibles con{' '}
-          <code>url1…url6</code>. Puede tardar bastante; si MEGA corta la conexión, se reintenta
+          <code>url1…url7</code>. Puede tardar bastante; si MEGA corta la conexión, se reintenta
           automáticamente.
         </p>
         <div className="settings-covers-actions">

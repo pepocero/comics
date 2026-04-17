@@ -10,10 +10,10 @@ PWA para listar una carpeta compartida de MEGA, descargar cómics y leerlos en e
 ## Configuración
 
 1. Copia `.env.example` a `.env` (no se sube a Git).
-2. **Varias carpetas MEGA:** define `VITE_MEGA_FOLDER_URL_1` … `VITE_MEGA_FOLDER_URL_6` (las que necesites) con el enlace completo de cada carpeta (incluye la clave tras `#`). **En `.env`, pon cada URL entre comillas dobles** (`"https://…#…"`), porque si no el `#` se interpreta como inicio de comentario y se pierde la clave. Opcional: `VITE_MEGA_SOURCE_LABEL_1` … `_6` para nombres en el selector.
+2. **Varias carpetas MEGA:** define `VITE_MEGA_FOLDER_URL_1` … `VITE_MEGA_FOLDER_URL_7` (las que necesites) con el enlace completo de cada carpeta (incluye la clave tras `#`). **En `.env`, pon cada URL entre comillas dobles** (`"https://…#…"`), porque si no el `#` se interpreta como inicio de comentario y se pierde la clave. Opcional: `VITE_MEGA_SOURCE_LABEL_1` … `_7` para nombres en el selector.
 3. Al iniciar, si hay más de una fuente en el entorno, podrás elegir cuenta. La elección se guarda en `localStorage`.
 4. **Sin `.env`:** puedes pegar un único enlace en la pantalla inicial (solo `localStorage`).
-5. **Compatibilidad:** `VITE_MEGA_FOLDER_URL` (una sola URL) sigue funcionando si no usas `_1` … `_6`.
+5. **Compatibilidad:** `VITE_MEGA_FOLDER_URL` (una sola URL) sigue funcionando si no usas `_1` … `_7`.
 
 En el hosting, configura las mismas variables `VITE_*` que en el entorno de build y vuelve a desplegar si las cambias.
 

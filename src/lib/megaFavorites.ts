@@ -1,8 +1,12 @@
+import { getConfiguredMegaSources } from '../config/megaSettings'
+
 /** Objetivo para abrir la biblioteca en la carpeta de un favorito. */
 export type MegaLibraryNavTarget = {
   megaFolderUrl: string
   pathLabels: string[]
   fileId: string
+  /** Si es true, tras ubicar el archivo se abre el visor (o descarga y abre si no está en caché). */
+  openComic?: boolean
 }
 
 const LS_KEY = 'comicread-mega-favorites-v1'
@@ -60,6 +64,20 @@ function parseList(json: string | null): MegaFavoriteRecord[] {
 /** Misma carpeta MEGA aunque haya espacios al inicio/final al guardar. */
 export function normalizeMegaFolderUrlForCompare(url: string): string {
   return url.trim()
+}
+
+/**
+ * Etiqueta de la fuente cuyo enlace coincide con el guardado en el favorito.
+ * Si el enlace ya no coincide con ninguna `VITE_MEGA_FOLDER_URL_*` (p. ej. enlace regenerado en MEGA),
+ * se indica explícitamente para que no parezca un fallo de la app.
+ */
+export function resolveFavoriteMegaSourceLabel(megaFolderUrl: string): string {
+  const n = normalizeMegaFolderUrlForCompare(megaFolderUrl)
+  const sources = getConfiguredMegaSources()
+  const hit = sources.find((s) => normalizeMegaFolderUrlForCompare(s.url) === n)
+  if (hit) return hit.label
+  if (sources.length === 0) return 'Enlace manual / no listado en fuentes'
+  return 'Enlace distinto al configurado ahora (p. ej. enlace MEGA regenerado)'
 }
 
 /**

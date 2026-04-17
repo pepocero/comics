@@ -37,7 +37,7 @@ function portadaPublicUrl(slot: MegaSourceSlot, fileBaseWithExt: string): string
 }
 
 /**
- * `slot` 0…5 = `VITE_MEGA_FOLDER_URL_1…6` → `public/portadas/url{slot+1}/` (p. ej. slot 5 → `url6`).
+ * `slot` 0…6 = `VITE_MEGA_FOLDER_URL_1…7` → `public/portadas/url{slot+1}/` (p. ej. slot 6 → `url7`).
  *
  * Prueba en orden: prefijo numérico (`001.…` → `001.ext`) y nombre completo sanitizado (como
  * genera la exportación cuando no hay prefijo o para coincidir con archivos nombrados igual que la carpeta).

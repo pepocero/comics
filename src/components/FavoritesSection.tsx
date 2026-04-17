@@ -1,6 +1,7 @@
 import { formatBytes } from '../lib/formatBytes'
 import {
   normalizeMegaFolderUrlForCompare,
+  resolveFavoriteMegaSourceLabel,
   type MegaFavoriteRecord,
   type MegaLibraryNavTarget,
 } from '../lib/megaFavorites'
@@ -42,7 +43,8 @@ export function FavoritesSection({
               const sourceOk =
                 normalizeMegaFolderUrlForCompare(row.megaFolderUrl) ===
                 normalizeMegaFolderUrlForCompare(currentMegaFolderUrl)
-              const canGo = libraryReady && sourceOk
+              const canGo = libraryReady
+              const sourceLabel = resolveFavoriteMegaSourceLabel(row.megaFolderUrl)
               return (
                 <li key={row.fileId} className="downloads-row">
                   <div className="downloads-row-info">
@@ -55,9 +57,10 @@ export function FavoritesSection({
                         dateStyle: 'short',
                         timeStyle: 'short',
                       })}
-                      {!sourceOk ? (
-                        <span className="favorites-wrong-source"> · otra fuente</span>
-                      ) : null}
+                    </span>
+                    <span className="favorites-source-line muted" title={row.megaFolderUrl}>
+                      Fuente: <strong>{sourceLabel}</strong>
+                      {sourceOk ? ' · vista actual' : ' · se ajustará al abrir'}
                     </span>
                   </div>
                   <div className="downloads-row-actions">
@@ -69,18 +72,17 @@ export function FavoritesSection({
                           megaFolderUrl: row.megaFolderUrl,
                           pathLabels: row.pathLabels,
                           fileId: row.fileId,
+                          openComic: true,
                         })
                       }
                       disabled={!canGo}
                       title={
                         !libraryReady
                           ? 'Elige una fuente en «Fuentes» primero'
-                          : !sourceOk
-                            ? 'Cambia a la fuente de este favorito en «Fuentes»'
-                            : 'Abrir la carpeta en la biblioteca'
+                          : 'Abre el archivo en el visor (descarga antes si no está en el dispositivo)'
                       }
                     >
-                      Ir a biblioteca
+                      Ir al cómic
                     </button>
                     <button
                       type="button"

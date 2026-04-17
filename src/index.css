@@ -2029,6 +2029,15 @@ button:disabled {
   margin-top: 0.75rem;
 }
 
+.source-picker-lead-box,
+.continue-page-lead-box {
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  background: rgba(7, 10, 22, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(4px);
+}
+
 .downloads-section-head {
   display: flex;
   flex-wrap: wrap;
@@ -2037,9 +2046,16 @@ button:disabled {
   margin-bottom: 0.75rem;
 }
 
-.favorites-wrong-source {
-  color: var(--cr-text-faint);
-  font-style: italic;
+.favorites-source-line {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.favorites-source-line strong {
+  font-weight: 600;
+  color: var(--cr-text);
 }
 
 .downloads-panel--standalone {

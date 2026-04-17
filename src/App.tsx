@@ -5,7 +5,10 @@ import {
   getMegaFolderUrl,
   hasEnvMegaSources,
   needsSourceSelection,
+  setMegaFolderUrl,
   setMegaLibraryEntered,
+  setStoredSourceSlot,
+  setUseManualMegaUrl,
 } from './config/megaSettings'
 import { BibliotecaSectionBackdrop } from './components/BibliotecaSectionBackdrop'
 import { AppShell, type ShellNavId } from './components/AppShell'
@@ -33,6 +36,7 @@ import {
 import type { ReadingProgress } from './lib/readingProgress'
 import {
   getMegaFavorites,
+  normalizeMegaFolderUrlForCompare,
   removeMegaFavorite,
   type MegaLibraryNavTarget,
 } from './lib/megaFavorites'
@@ -278,9 +282,25 @@ export default function App() {
   const favoriteItems = useMemo(() => getMegaFavorites(), [favoritesTick])
 
   const handleGoToLibraryFromFavorite = useCallback((target: MegaLibraryNavTarget) => {
+    const want = normalizeMegaFolderUrlForCompare(target.megaFolderUrl)
+    const cur = normalizeMegaFolderUrlForCompare(getMegaFolderUrl())
+    if (want !== cur) {
+      const sources = getConfiguredMegaSources()
+      const match = sources.find(
+        (s) => normalizeMegaFolderUrlForCompare(s.url) === want,
+      )
+      if (match) {
+        setStoredSourceSlot(match.slot)
+        setUseManualMegaUrl(false)
+      } else {
+        setMegaFolderUrl(target.megaFolderUrl)
+        setUseManualMegaUrl(true)
+      }
+      refresh()
+    }
     setLibraryNavTarget(target)
     setSection('library')
-  }, [])
+  }, [refresh])
 
   const handleRemoveFavorite = useCallback((fileId: string, displayName: string) => {
     if (!window.confirm(`¿Quitar «${displayName}» de favoritos?`)) return
