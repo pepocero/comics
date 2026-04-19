@@ -1,5 +1,5 @@
-/** Slot 0…7 → VITE_MEGA_FOLDER_URL_1 … _8 */
-export type MegaSourceSlot = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+/** Slot 0-based: corresponde a VITE_MEGA_FOLDER_URL_{slot+1} y a `public/portadas/url{slot+1}/`. */
+export type MegaSourceSlot = number
 
 export type MegaSource = {
   slot: MegaSourceSlot
@@ -40,46 +40,22 @@ export function clearMegaLibraryEntered(): void {
   }
 }
 
-function envUrl(slot: MegaSourceSlot): string {
-  if (slot === 0) return (import.meta.env.VITE_MEGA_FOLDER_URL_1 ?? '').trim()
-  if (slot === 1) return (import.meta.env.VITE_MEGA_FOLDER_URL_2 ?? '').trim()
-  if (slot === 2) return (import.meta.env.VITE_MEGA_FOLDER_URL_3 ?? '').trim()
-  if (slot === 3) return (import.meta.env.VITE_MEGA_FOLDER_URL_4 ?? '').trim()
-  if (slot === 4) return (import.meta.env.VITE_MEGA_FOLDER_URL_5 ?? '').trim()
-  if (slot === 5) return (import.meta.env.VITE_MEGA_FOLDER_URL_6 ?? '').trim()
-  if (slot === 6) return (import.meta.env.VITE_MEGA_FOLDER_URL_7 ?? '').trim()
-  return (import.meta.env.VITE_MEGA_FOLDER_URL_8 ?? '').trim()
-}
-
-function envLabel(slot: MegaSourceSlot): string {
-  if (slot === 0) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_1 ?? '').trim()
-  if (slot === 1) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_2 ?? '').trim()
-  if (slot === 2) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_3 ?? '').trim()
-  if (slot === 3) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_4 ?? '').trim()
-  if (slot === 4) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_5 ?? '').trim()
-  if (slot === 5) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_6 ?? '').trim()
-  if (slot === 6) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_7 ?? '').trim()
-  return (import.meta.env.VITE_MEGA_SOURCE_LABEL_8 ?? '').trim()
-}
-
 /**
- * Fuentes definidas en build (Vite): hasta 8 enlaces MEGA en `VITE_MEGA_FOLDER_URL_*`.
- * Si no hay ninguno, se puede usar solo URL manual en localStorage.
+ * Fuentes definidas en build: cualquier `VITE_MEGA_FOLDER_URL_<n>` y opcional `VITE_MEGA_SOURCE_LABEL_<n>` (n ≥ 1).
+ * La lista se inyecta en build desde `vite.config.ts` (`__COMICREAD_MEGA_SOURCES__`).
+ * Si no hay claves numeradas, se usa `VITE_MEGA_FOLDER_URL` como única fuente (n=1).
  */
 export function getConfiguredMegaSources(): MegaSource[] {
   const out: MegaSource[] = []
-  for (let s = 0; s < 8; s++) {
-    const slot = s as MegaSourceSlot
-    const url = envUrl(slot)
+  for (const row of __COMICREAD_MEGA_SOURCES__) {
+    const url = row.url.trim()
     if (!url) continue
-    const rawLabel = envLabel(slot)
+    const n = row.n
+    const slot = n - 1
+    const rawLabel = row.label.trim()
     const hasCustomLabel = rawLabel.length > 0
-    const label = rawLabel || `Cuenta ${s + 1}`
+    const label = hasCustomLabel ? rawLabel : `Cuenta ${n}`
     out.push({ slot, label, url, hasCustomLabel })
-  }
-  const legacy = (import.meta.env.VITE_MEGA_FOLDER_URL ?? '').trim()
-  if (out.length === 0 && legacy) {
-    out.push({ slot: 0, label: 'MEGA', url: legacy, hasCustomLabel: false })
   }
   return out
 }
@@ -88,14 +64,15 @@ export function getStoredSourceSlot(): MegaSourceSlot | null {
   const raw = localStorage.getItem(LS_SLOT)
   if (raw === null) return null
   const n = parseInt(raw, 10)
-  if (n === 0 || n === 1 || n === 2 || n === 3 || n === 4 || n === 5 || n === 6 || n === 7)
-    return n as MegaSourceSlot
-  return null
+  if (!Number.isFinite(n) || n < 0) return null
+  const sources = getConfiguredMegaSources()
+  if (!sources.some((s) => s.slot === n)) return null
+  return n
 }
 
 /**
  * Slot de env activo → `public/portadas/url{slot+1}/`
- * (`VITE_MEGA_FOLDER_URL_1` → url1 … `URL_8` → url8).
+ * (`VITE_MEGA_FOLDER_URL_1` → url1, `VITE_MEGA_FOLDER_URL_9` → url9).
  */
 export function getMegaSourceSlotForPortada(activeFolderUrl: string): MegaSourceSlot | null {
   if (isUsingManualMegaUrl()) return null

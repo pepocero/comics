@@ -2480,6 +2480,123 @@ button:disabled {
   margin: 0 auto;
 }
 
+/* Carga inicial del árbol MEGA: contraste en claro/oscuro + patrón tipo “material” */
+.mega-browser-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: min(70dvh, 28rem);
+  padding: 1.5rem 1rem;
+}
+
+.mega-browser-loading-card {
+  width: 100%;
+  max-width: 20rem;
+  padding: 1.5rem 1.35rem 1.65rem;
+  border-radius: 12px;
+  background: var(--cr-elevated);
+  border: 1px solid var(--cr-border-soft);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  text-align: center;
+}
+
+[data-theme='light'] .mega-browser-loading-card {
+  box-shadow: 0 8px 28px rgba(24, 20, 48, 0.1);
+}
+
+.mega-browser-loading-bar {
+  margin: 0 0 1.25rem;
+}
+
+.mega-browser-loading-bar-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--cr-border-muted);
+  overflow: hidden;
+}
+
+.mega-browser-loading-bar-indeterminate {
+  height: 100%;
+  width: 40%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--cr-btn-primary), var(--cr-link));
+  animation: mega-loading-bar-slide 1.15s ease-in-out infinite;
+}
+
+@keyframes mega-loading-bar-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+.mega-browser-loading-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.mega-browser-loading-dots span {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--cr-btn-primary);
+  opacity: 0.35;
+  animation: mega-loading-dot 1.05s ease-in-out infinite;
+}
+
+.mega-browser-loading-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.mega-browser-loading-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes mega-loading-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-0.2rem);
+  }
+}
+
+.mega-browser-loading-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--cr-text);
+}
+
+.mega-browser-loading-sub {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  color: var(--cr-text-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mega-browser-loading-bar-indeterminate {
+    animation: none;
+    width: 100%;
+    opacity: 0.85;
+  }
+
+  .mega-browser-loading-dots span {
+    animation: none;
+    opacity: 0.75;
+  }
+}
+
 .browser .panel {
   max-width: none;
 }

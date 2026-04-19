@@ -759,8 +759,26 @@ export function MegaBrowser({
 
   if (loadingTree) {
     return (
-      <div className="panel mega-browser-panel">
-        <p className="muted">Conectando…</p>
+      <div
+        className="panel mega-browser-panel mega-browser-loading"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <div className="mega-browser-loading-card">
+          <div className="mega-browser-loading-bar" aria-hidden="true">
+            <div className="mega-browser-loading-bar-track">
+              <div className="mega-browser-loading-bar-indeterminate" />
+            </div>
+          </div>
+          <div className="mega-browser-loading-dots" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <p className="mega-browser-loading-title">Conectando con MEGA</p>
+          <p className="mega-browser-loading-sub">Obteniendo la carpeta compartida…</p>
+        </div>
       </div>
     )
   }

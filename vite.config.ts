@@ -45,6 +45,39 @@ function comicreadBuildMetaPlugin(version: string, buildId: string): Plugin {
   }
 }
 
+/**
+ * Lee en build `VITE_MEGA_FOLDER_URL_<n>` y `VITE_MEGA_SOURCE_LABEL_<n>` (n ≥ 1, sin límite práctico).
+ * Si no hay ninguna numerada, usa `VITE_MEGA_FOLDER_URL` como fuente única (equivale a n=1).
+ */
+function comicreadMegaSourcesFromViteEnv(env: Record<string, string>): { n: number; url: string; label: string }[] {
+  const urlByN = new Map<number, string>()
+  const labelByN = new Map<number, string>()
+  for (const [key, val] of Object.entries(env)) {
+    const um = key.match(/^VITE_MEGA_FOLDER_URL_(\d+)$/)
+    if (um) {
+      const n = parseInt(um[1], 10)
+      if (n >= 1 && n <= 999) urlByN.set(n, String(val ?? '').trim())
+    }
+    const lm = key.match(/^VITE_MEGA_SOURCE_LABEL_(\d+)$/)
+    if (lm) {
+      const n = parseInt(lm[1], 10)
+      if (n >= 1 && n <= 999) labelByN.set(n, String(val ?? '').trim())
+    }
+  }
+  const ns = [...urlByN.keys()].sort((a, b) => a - b)
+  const rows: { n: number; url: string; label: string }[] = []
+  for (const n of ns) {
+    const url = urlByN.get(n) ?? ''
+    if (!url) continue
+    rows.push({ n, url, label: labelByN.get(n) ?? '' })
+  }
+  const legacy = (env.VITE_MEGA_FOLDER_URL ?? '').trim()
+  if (rows.length === 0 && legacy) {
+    rows.push({ n: 1, url: legacy, label: '' })
+  }
+  return rows
+}
+
 /** URL absoluta de og:image para redes (WhatsApp exige https + dominio). Ver `VITE_SITE_ORIGIN` en `.env.example`. */
 function comicreadOgMetaPlugin(siteOrigin: string): Plugin {
   const imagePath = '/portadas/portada_generica.png'
@@ -65,6 +98,7 @@ export default defineConfig(({ mode }) => {
   /** Solo prefijo VITE_: `''` hace que se mezcle todo `process.env` y no aporta al plugin OG. */
   const env = loadEnv(mode, process.cwd(), 'VITE_')
   const siteOrigin = (env.VITE_SITE_ORIGIN ?? '').replace(/\/$/, '')
+  const megaSources = comicreadMegaSourcesFromViteEnv(env as Record<string, string>)
 
   return {
   clearScreen: false,
@@ -76,6 +110,7 @@ export default defineConfig(({ mode }) => {
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_ID__: JSON.stringify(__BUILD_ID__),
+    __COMICREAD_MEGA_SOURCES__: JSON.stringify(megaSources),
   },
   plugins: [
     react(),
