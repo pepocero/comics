@@ -14,6 +14,7 @@ interface ImportMetaEnv {
   readonly VITE_MEGA_FOLDER_URL_5?: string
   readonly VITE_MEGA_FOLDER_URL_6?: string
   readonly VITE_MEGA_FOLDER_URL_7?: string
+  readonly VITE_MEGA_FOLDER_URL_8?: string
   readonly VITE_MEGA_SOURCE_LABEL_1?: string
   readonly VITE_MEGA_SOURCE_LABEL_2?: string
   readonly VITE_MEGA_SOURCE_LABEL_3?: string
@@ -21,6 +22,9 @@ interface ImportMetaEnv {
   readonly VITE_MEGA_SOURCE_LABEL_5?: string
   readonly VITE_MEGA_SOURCE_LABEL_6?: string
   readonly VITE_MEGA_SOURCE_LABEL_7?: string
+  readonly VITE_MEGA_SOURCE_LABEL_8?: string
+  /** Opcional: POST JSON `{ "url": "<enlace Terabox>" }` que devuelve `{ ok, mapped: [...] }`. Vacío = `/api/terabox-proxy` (Vite proxy en dev, CF Function en prod). */
+  readonly VITE_TERABOX_RESOLVER_URL?: string
 }
 
 interface ImportMeta {

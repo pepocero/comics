@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { parseMegaFolderUrl } from '../lib/parseMegaFolderUrl'
+import { parseTeraboxShareUrl } from '../lib/parseTeraboxShareUrl'
 import {
   getManualMegaFolderUrl,
   getMegaSourceSlotForPortada,
@@ -19,6 +20,7 @@ import { formatBytes } from '../lib/formatBytes'
 import { applyTheme, getStoredTheme, type AppTheme } from '../lib/appTheme'
 import { AppVersionFooter } from './AppVersionFooter'
 import { exportMegaRootFolderCoversZip } from '../lib/megaCoverExport'
+import { cloudSourceKind } from '../lib/cloudSource'
 
 type Props = {
   onSaved: () => void
@@ -147,14 +149,21 @@ export function SettingsPanel({
 
   function handleUrlSubmit(e: FormEvent): void {
     e.preventDefault()
-    const parsed = parseMegaFolderUrl(urlValue)
-    if (!parsed.ok) {
-      setUrlError(parsed.error)
+    const mega = parseMegaFolderUrl(urlValue)
+    if (mega.ok) {
+      setUrlError(null)
+      setMegaFolderUrl(mega.url)
+      onSaved()
       return
     }
-    setUrlError(null)
-    setMegaFolderUrl(parsed.url)
-    onSaved()
+    const terabox = parseTeraboxShareUrl(urlValue)
+    if (terabox.ok) {
+      setUrlError(null)
+      setMegaFolderUrl(terabox.url)
+      onSaved()
+      return
+    }
+    setUrlError(`${mega.error} Si es Terabox: ${terabox.error}`)
   }
 
   function handleUrlClear(): void {
@@ -181,7 +190,7 @@ export function SettingsPanel({
           )}
         </p>
         <form onSubmit={handleUrlSubmit}>
-          <label htmlFor="mega-url">Enlace de carpeta MEGA</label>
+          <label htmlFor="mega-url">Enlace MEGA o Terabox</label>
           <textarea
             id="mega-url"
             className="mega-url-input"
@@ -190,7 +199,7 @@ export function SettingsPanel({
               setUrlValue(e.target.value)
               setUrlError(null)
             }}
-            placeholder="https://mega.nz/folder/…#…"
+            placeholder="https://mega.nz/folder/…#… o https://1024terabox.com/s/…"
             rows={3}
             autoComplete="off"
             spellCheck={false}
@@ -400,7 +409,9 @@ export function SettingsPanel({
   }
 
   const megaCoversSection =
-    fromEnv && activeMegaFolderUrl.trim().length > 0 ? (
+    fromEnv &&
+    activeMegaFolderUrl.trim().length > 0 &&
+    cloudSourceKind(activeMegaFolderUrl) === 'mega' ? (
       <section className="settings-subsection" aria-labelledby="mega-covers-heading">
         <h2 id="mega-covers-heading" className="settings-h2">
           Portadas de carpetas MEGA
@@ -410,7 +421,7 @@ export function SettingsPanel({
           (<code>.cbz/.cbr/.zip/.rar</code>) en todo su subárbol, elige el archivo <strong>más
           pequeño</strong> (suele ir mucho más rápido que un tomo grande), extrae la primera imagen
           y descarga todo en un único <code>.zip</code> con nombres compatibles con{' '}
-          <code>url1…url7</code>. Puede tardar bastante; si MEGA corta la conexión, se reintenta
+          <code>url1…url8</code>. Puede tardar bastante; si MEGA corta la conexión, se reintenta
           automáticamente.
         </p>
         <div className="settings-covers-actions">

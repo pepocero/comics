@@ -1,5 +1,5 @@
-/** Slot 0…6 → VITE_MEGA_FOLDER_URL_1 … _7 */
-export type MegaSourceSlot = 0 | 1 | 2 | 3 | 4 | 5 | 6
+/** Slot 0…7 → VITE_MEGA_FOLDER_URL_1 … _8 */
+export type MegaSourceSlot = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
 
 export type MegaSource = {
   slot: MegaSourceSlot
@@ -47,7 +47,8 @@ function envUrl(slot: MegaSourceSlot): string {
   if (slot === 3) return (import.meta.env.VITE_MEGA_FOLDER_URL_4 ?? '').trim()
   if (slot === 4) return (import.meta.env.VITE_MEGA_FOLDER_URL_5 ?? '').trim()
   if (slot === 5) return (import.meta.env.VITE_MEGA_FOLDER_URL_6 ?? '').trim()
-  return (import.meta.env.VITE_MEGA_FOLDER_URL_7 ?? '').trim()
+  if (slot === 6) return (import.meta.env.VITE_MEGA_FOLDER_URL_7 ?? '').trim()
+  return (import.meta.env.VITE_MEGA_FOLDER_URL_8 ?? '').trim()
 }
 
 function envLabel(slot: MegaSourceSlot): string {
@@ -57,16 +58,17 @@ function envLabel(slot: MegaSourceSlot): string {
   if (slot === 3) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_4 ?? '').trim()
   if (slot === 4) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_5 ?? '').trim()
   if (slot === 5) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_6 ?? '').trim()
-  return (import.meta.env.VITE_MEGA_SOURCE_LABEL_7 ?? '').trim()
+  if (slot === 6) return (import.meta.env.VITE_MEGA_SOURCE_LABEL_7 ?? '').trim()
+  return (import.meta.env.VITE_MEGA_SOURCE_LABEL_8 ?? '').trim()
 }
 
 /**
- * Fuentes definidas en build (Vite): hasta 7 enlaces MEGA.
+ * Fuentes definidas en build (Vite): hasta 8 enlaces (MEGA o Terabox en `VITE_MEGA_FOLDER_URL_*`).
  * Si no hay ninguno, se puede usar solo URL manual en localStorage.
  */
 export function getConfiguredMegaSources(): MegaSource[] {
   const out: MegaSource[] = []
-  for (let s = 0; s < 7; s++) {
+  for (let s = 0; s < 8; s++) {
     const slot = s as MegaSourceSlot
     const url = envUrl(slot)
     if (!url) continue
@@ -86,13 +88,14 @@ export function getStoredSourceSlot(): MegaSourceSlot | null {
   const raw = localStorage.getItem(LS_SLOT)
   if (raw === null) return null
   const n = parseInt(raw, 10)
-  if (n === 0 || n === 1 || n === 2 || n === 3 || n === 4 || n === 5 || n === 6) return n as MegaSourceSlot
+  if (n === 0 || n === 1 || n === 2 || n === 3 || n === 4 || n === 5 || n === 6 || n === 7)
+    return n as MegaSourceSlot
   return null
 }
 
 /**
  * Slot de env activo → `public/portadas/url{slot+1}/`
- * (`VITE_MEGA_FOLDER_URL_1` → url1 … `URL_7` → url7).
+ * (`VITE_MEGA_FOLDER_URL_1` → url1 … `URL_8` → url8).
  */
 export function getMegaSourceSlotForPortada(activeFolderUrl: string): MegaSourceSlot | null {
   if (isUsingManualMegaUrl()) return null
