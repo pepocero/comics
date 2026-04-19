@@ -6,7 +6,6 @@ import {
   setUseManualMegaUrl,
 } from '../config/megaSettings'
 import { parseMegaFolderUrl } from '../lib/parseMegaFolderUrl'
-import { parseTeraboxShareUrl } from '../lib/parseTeraboxShareUrl'
 import { LocalComicOpenButton, type LocalComicOpenPayload } from './LocalComicOpenButton'
 
 type Props = {
@@ -29,23 +28,15 @@ export function SourcePicker({ sources, onSelect, onOpenLocalComic }: Props) {
       onSelect()
       return
     }
-    const terabox = parseTeraboxShareUrl(pastedUrl)
-    if (terabox.ok) {
-      setPasteError(null)
-      setMegaFolderUrl(terabox.url)
-      setUseManualMegaUrl(true)
-      onSelect()
-      return
-    }
-    setPasteError(`${mega.error} Si es Terabox: ${terabox.error}`)
+    setPasteError(mega.error)
   }
 
   return (
     <section className="panel source-picker">
       <h1 className="source-picker-title">Fuentes de lectura</h1>
       <p className="lead source-picker-lead-box">
-        Elige la cuenta de MEGA o un enlace Terabox en la configuración de la app. Cada fuente apunta a
-        una carpeta o recurso compartido; luego podrás explorarlo en la biblioteca.
+        Elige la cuenta de MEGA en la configuración de la app. Cada fuente apunta a una carpeta; luego
+        podrás explorarla en la biblioteca.
       </p>
       <ul className="source-list">
         {sources.map((s) => (
@@ -78,11 +69,10 @@ export function SourcePicker({ sources, onSelect, onOpenLocalComic }: Props) {
       </p>
 
       <form className="source-picker-paste" onSubmit={handlePastedSubmit}>
-        <h2 className="source-picker-paste-title">Enlace MEGA o Terabox</h2>
+        <h2 className="source-picker-paste-title">Enlace MEGA</h2>
         <p className="source-picker-paste-lead muted">
-          Pega el enlace completo: carpeta MEGA (con la clave tras <code>#</code>) o recurso compartido
-          Terabox (<code>/s/…</code>). Se usará con prioridad sobre las fuentes de arriba hasta que elijas
-          otra.
+          Pega el enlace completo de la carpeta (incluye la clave tras <code>#</code>). Se usará con
+          prioridad sobre las fuentes de arriba hasta que elijas otra.
         </p>
         <label className="source-picker-paste-label" htmlFor="source-paste-mega-url">
           URL
@@ -95,7 +85,7 @@ export function SourcePicker({ sources, onSelect, onOpenLocalComic }: Props) {
             setPastedUrl(e.target.value)
             setPasteError(null)
           }}
-          placeholder="https://mega.nz/folder/…#… o https://1024terabox.com/s/…"
+          placeholder="https://mega.nz/folder/…#…"
           rows={3}
           autoComplete="off"
           spellCheck={false}

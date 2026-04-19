@@ -48,7 +48,6 @@ import {
 import type { CachedComicMeta } from './lib/megaCachedViewer'
 import { loadViewerPagesFromMegaCache } from './lib/megaCachedViewer'
 import { cloudSourceKind } from './lib/cloudSource'
-import { TeraboxShareBrowser } from './components/TeraboxShareBrowser'
 
 type ViewerState = {
   title: string
@@ -386,27 +385,6 @@ export default function App() {
           )
         }
         const kind = cloudSourceKind(megaUrl)
-        if (kind === 'terabox') {
-          return (
-            <TeraboxShareBrowser
-              shareUrl={megaUrl}
-              onOpenSettings={() => setShowSettings(true)}
-              onChangeSource={
-                canChangeSource
-                  ? () => {
-                      clearMegaLibraryEntered()
-                      setSection('sources')
-                    }
-                  : undefined
-              }
-              onOpenComic={handleOpenComic}
-              onOpenLocalComic={handleOpenLocalComic}
-              libraryNavTarget={libraryNavTarget}
-              onLibraryNavTargetConsumed={consumeLibraryNavTarget}
-              onFavoritesChanged={() => bumpFavorites((k) => k + 1)}
-            />
-          )
-        }
         if (kind === 'mega') {
           return (
             <MegaBrowser
@@ -432,8 +410,8 @@ export default function App() {
           <div className="panel library-gate">
             <h1 className="library-gate-title">Biblioteca</h1>
             <p className="lead">
-              La URL activa no es un enlace compatible (solo se admiten carpetas <strong>MEGA</strong> o
-              enlaces compartidos <strong>Terabox</strong> tipo <code>/s/…</code>).
+              La URL activa no es un enlace MEGA válido (carpeta compartida con clave tras{' '}
+              <code>#</code>).
             </p>
             <button type="button" className="home-cta" onClick={() => setSection('sources')}>
               Ir a Fuentes

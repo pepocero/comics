@@ -66,26 +66,12 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_')
   const siteOrigin = (env.VITE_SITE_ORIGIN ?? '').replace(/\/$/, '')
 
-  /** Solo en Node (Vite): destino del proxy `/api/terabox-proxy` en desarrollo. `terabox.page` suele fallar con 502. */
-  const envAll = loadEnv(mode, process.cwd(), '')
-  const teraboxDevTarget = (envAll.TERABOX_DEV_PROXY_TARGET ?? 'https://terabox.page').replace(/\/$/, '')
-  const rawTeraboxPath = envAll.TERABOX_DEV_PROXY_PATH ?? '/api/proxy'
-  const teraboxDevPath = rawTeraboxPath.startsWith('/') ? rawTeraboxPath : `/${rawTeraboxPath}`
-
   return {
   clearScreen: false,
   server: {
     host: '127.0.0.1',
     port: 5173,
     strictPort: false,
-    /** Resolver Terabox sin CORS en desarrollo (mismo path que CF Pages Function en prod). */
-    proxy: {
-      '/api/terabox-proxy': {
-        target: teraboxDevTarget,
-        changeOrigin: true,
-        rewrite: () => teraboxDevPath,
-      },
-    },
   },
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
@@ -134,11 +120,6 @@ export default defineConfig(({ mode }) => {
           /** CDN de ficheros (p. ej. userstorage.mega.co.nz); sin esto el SW puede interceptar mal y fallar la descarga */
           {
             urlPattern: /^https:\/\/[a-z0-9.-]+\.mega\.co\.nz\/.*/i,
-            handler: 'NetworkOnly',
-          },
-          /** Descargas Terabox / dlinks: no cachear en SW */
-          {
-            urlPattern: /^https:\/\/[^/]+\.(terabox\.com|1024terabox\.com)\/.*/i,
             handler: 'NetworkOnly',
           },
         ],

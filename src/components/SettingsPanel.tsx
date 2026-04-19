@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { parseMegaFolderUrl } from '../lib/parseMegaFolderUrl'
-import { parseTeraboxShareUrl } from '../lib/parseTeraboxShareUrl'
 import {
   getManualMegaFolderUrl,
   getMegaSourceSlotForPortada,
@@ -156,14 +155,7 @@ export function SettingsPanel({
       onSaved()
       return
     }
-    const terabox = parseTeraboxShareUrl(urlValue)
-    if (terabox.ok) {
-      setUrlError(null)
-      setMegaFolderUrl(terabox.url)
-      onSaved()
-      return
-    }
-    setUrlError(`${mega.error} Si es Terabox: ${terabox.error}`)
+    setUrlError(mega.error)
   }
 
   function handleUrlClear(): void {
@@ -190,7 +182,7 @@ export function SettingsPanel({
           )}
         </p>
         <form onSubmit={handleUrlSubmit}>
-          <label htmlFor="mega-url">Enlace MEGA o Terabox</label>
+          <label htmlFor="mega-url">Enlace MEGA</label>
           <textarea
             id="mega-url"
             className="mega-url-input"
@@ -199,7 +191,7 @@ export function SettingsPanel({
               setUrlValue(e.target.value)
               setUrlError(null)
             }}
-            placeholder="https://mega.nz/folder/…#… o https://1024terabox.com/s/…"
+            placeholder="https://mega.nz/folder/…#…"
             rows={3}
             autoComplete="off"
             spellCheck={false}

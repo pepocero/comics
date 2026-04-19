@@ -63,7 +63,7 @@ function envLabel(slot: MegaSourceSlot): string {
 }
 
 /**
- * Fuentes definidas en build (Vite): hasta 8 enlaces (MEGA o Terabox en `VITE_MEGA_FOLDER_URL_*`).
+ * Fuentes definidas en build (Vite): hasta 8 enlaces MEGA en `VITE_MEGA_FOLDER_URL_*`.
  * Si no hay ninguno, se puede usar solo URL manual en localStorage.
  */
 export function getConfiguredMegaSources(): MegaSource[] {
