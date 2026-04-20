@@ -191,6 +191,18 @@ function countRootDirs(node: MegaFile): number {
   return (node.children ?? []).filter((c) => c.directory).length
 }
 
+function sumTreeBytes(node: MegaFile): number {
+  if (!node.directory) {
+    return typeof node.size === 'number' && Number.isFinite(node.size) && node.size > 0 ? node.size : 0
+  }
+  const kids = node.children ?? []
+  let total = 0
+  for (const kid of kids) {
+    total += sumTreeBytes(kid)
+  }
+  return total
+}
+
 function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms)
@@ -289,6 +301,7 @@ export function MegaBrowser({
     )
     return src?.label ?? 'Fuente actual'
   }, [megaFolderUrl])
+  const sourceTotalBytes = useMemo(() => (root ? sumTreeBytes(root) : 0), [root])
 
   const searchHits = useMemo(() => {
     if (!root || !librarySearchCommitted.trim()) return []
@@ -823,7 +836,9 @@ export function MegaBrowser({
 
       <div className="mega-library-head">
         <div className="mega-library-head-titles">
-          <h1 className="mega-library-title">{sourceLabel}</h1>
+          <h1 className="mega-library-title">
+            {sourceTotalBytes > 0 ? `${sourceLabel} (${formatBytes(sourceTotalBytes)})` : sourceLabel}
+          </h1>
         </div>
         <button type="button" className="mega-library-search-toggle" onClick={toggleLibrarySearchVisible}>
           {librarySearchVisible ? 'Ocultar buscador' : 'Buscar'}
