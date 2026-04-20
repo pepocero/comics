@@ -67,16 +67,45 @@ export default function App() {
   const [homeCacheBytes, setHomeCacheBytes] = useState(0)
   const [homeOpeningId, setHomeOpeningId] = useState<string | null>(null)
   const [homeToast, setHomeToast] = useState<string | null>(null)
+  const [backExitToast, setBackExitToast] = useState<string | null>(null)
   const [libraryNavTarget, setLibraryNavTarget] = useState<MegaLibraryNavTarget | null>(null)
   const [favoritesTick, bumpFavorites] = useState(0)
 
   const viewerRef = useRef<ViewerState | null>(null)
+  const showSettingsRef = useRef(false)
   const lastPageIndexRef = useRef(0)
   const progressSaveTimerRef = useRef<number | null>(null)
+  const backExitToastTimerRef = useRef<number | null>(null)
+  const sectionHistoryRef = useRef<ShellNavId[]>(['home'])
+  const suppressSectionHistoryPushRef = useRef(false)
+  const lastBackPressMsRef = useRef(0)
 
   useEffect(() => {
     viewerRef.current = viewer
   }, [viewer])
+
+  useEffect(() => {
+    showSettingsRef.current = showSettings
+  }, [showSettings])
+
+  useEffect(() => {
+    return () => {
+      if (backExitToastTimerRef.current !== null) {
+        window.clearTimeout(backExitToastTimerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (suppressSectionHistoryPushRef.current) {
+      suppressSectionHistoryPushRef.current = false
+      return
+    }
+    const stack = sectionHistoryRef.current
+    if (stack[stack.length - 1] !== section) {
+      stack.push(section)
+    }
+  }, [section])
 
   const sources = getConfiguredMegaSources()
   const megaUrl = getMegaFolderUrl()
@@ -317,6 +346,66 @@ export default function App() {
     setSection(id)
   }, [])
 
+  const handleAppBack = useCallback((): boolean => {
+    if (viewerRef.current) {
+      closeViewer()
+      return true
+    }
+
+    if (showSettingsRef.current) {
+      setShowSettings(false)
+      return true
+    }
+
+    const stack = sectionHistoryRef.current
+    if (stack.length > 1) {
+      stack.pop()
+      const prev = stack[stack.length - 1] ?? 'home'
+      suppressSectionHistoryPushRef.current = true
+      setSection(prev)
+      return true
+    }
+
+    return false
+  }, [closeViewer])
+
+  useEffect(() => {
+    const isMobileViewport = window.matchMedia('(max-width: 899px)').matches
+    if (!isMobileViewport) return
+
+    const marker = { __comicreadBackTrap: true }
+    window.history.pushState(marker, '')
+
+    const onPopState = () => {
+      const handled = handleAppBack()
+      if (handled) {
+        window.history.pushState(marker, '')
+        return
+      }
+
+      const now = Date.now()
+      if (now - lastBackPressMsRef.current < 1500) {
+        // Segunda pulsación: no reinsertamos el estado para permitir salir.
+        return
+      }
+      lastBackPressMsRef.current = now
+      setBackExitToast('Pulsa atrás otra vez para salir de la app.')
+      if (backExitToastTimerRef.current !== null) {
+        window.clearTimeout(backExitToastTimerRef.current)
+      }
+      backExitToastTimerRef.current = window.setTimeout(() => {
+        setBackExitToast(null)
+        backExitToastTimerRef.current = null
+      }, 1400)
+      window.history.pushState(marker, '')
+    }
+
+    window.addEventListener('popstate', onPopState)
+    return () => {
+      window.removeEventListener('popstate', onPopState)
+    }
+  }, [handleAppBack])
+
   const needsManualSetup = !hasEnvMegaSources() && !megaUrl
 
   if (needsManualSetup) {
@@ -468,6 +557,11 @@ export default function App() {
           >
             ×
           </button>
+        </div>
+      ) : null}
+      {backExitToast ? (
+        <div className="toast toast--back-exit" role="status" aria-live="polite">
+          {backExitToast}
         </div>
       ) : null}
       <AppShell

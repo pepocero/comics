@@ -52,6 +52,14 @@ type Props = {
   onFavoritesChanged?: () => void
 }
 
+type MegaLibraryWarmState = {
+  root: MegaFile
+  pathLabels: string[]
+}
+
+/** Cache en memoria por URL de fuente para evitar recarga completa al volver del visor. */
+const MEGA_LIBRARY_WARM_CACHE = new Map<string, MegaLibraryWarmState>()
+
 function sortEntries(files: MegaFile[]): MegaFile[] {
   return [...files].sort((a, b) => {
     if (a.directory !== b.directory) return a.directory ? -1 : 1
@@ -179,6 +187,19 @@ function rootVisibleFolderNames(node: MegaFile): string[] {
     .map((f) => f.name || '(sin nombre)')
 }
 
+function resolveTrailByLabels(root: MegaFile, labels: string[]): MegaFile[] {
+  const trail: MegaFile[] = [root]
+  let cursor: MegaFile = root
+  for (const label of labels) {
+    const kids = visibleSortedEntries(cursor).filter((f) => f.directory)
+    const next = kids.find((f) => (f.name || '') === label)
+    if (!next) break
+    trail.push(next)
+    cursor = next
+  }
+  return trail
+}
+
 async function loadMegaRootFresh(megaFolderUrl: string): Promise<MegaFile> {
   // API nueva para evitar estado/cache en memoria de una sesión previa.
   const api = new MegaApi(false)
@@ -253,6 +274,10 @@ export function MegaBrowser({
   onLibraryNavTargetConsumed,
   onFavoritesChanged,
 }: Props) {
+  const sourceCacheKey = useMemo(
+    () => normalizeMegaFolderUrlForCompare(megaFolderUrl),
+    [megaFolderUrl],
+  )
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadingTree, setLoadingTree] = useState(true)
   const [downloadingName, setDownloadingName] = useState<string | null>(null)
@@ -289,6 +314,14 @@ export function MegaBrowser({
   useEffect(() => {
     breadcrumbsRef.current = breadcrumbs
   }, [breadcrumbs])
+
+  useEffect(() => {
+    if (!root || loadingTree || loadError) return
+    MEGA_LIBRARY_WARM_CACHE.set(sourceCacheKey, {
+      root,
+      pathLabels: breadcrumbs.slice(1).map((b) => b.name || ''),
+    })
+  }, [sourceCacheKey, root, breadcrumbs, loadingTree, loadError])
 
   const favoriteIdSet = useMemo(
     () => new Set(getMegaFavorites().map((f) => f.fileId)),
@@ -409,8 +442,18 @@ export function MegaBrowser({
   )
 
   useEffect(() => {
+    const warm = MEGA_LIBRARY_WARM_CACHE.get(sourceCacheKey)
+    if (warm) {
+      setLoadError(null)
+      setRoot(warm.root)
+      setBreadcrumbs(resolveTrailByLabels(warm.root, warm.pathLabels))
+      setLoadingTree(false)
+      // Refresco silencioso para no mostrar "Conectando..." al volver del visor.
+      void reloadTreeFromMega(true)
+      return
+    }
     void reloadTreeFromMega(false)
-  }, [reloadTreeFromMega])
+  }, [sourceCacheKey, reloadTreeFromMega])
 
   useLayoutEffect(() => {
     if (!root || loadingTree || loadError) return
@@ -836,9 +879,10 @@ export function MegaBrowser({
 
       <div className="mega-library-head">
         <div className="mega-library-head-titles">
-          <h1 className="mega-library-title">
-            {sourceTotalBytes > 0 ? `${sourceLabel} (${formatBytes(sourceTotalBytes)})` : sourceLabel}
-          </h1>
+          <h1 className="mega-library-title">{sourceLabel}</h1>
+          {sourceTotalBytes > 0 ? (
+            <p className="mega-library-subtitle">Tamaño total: {formatBytes(sourceTotalBytes)}</p>
+          ) : null}
         </div>
         <button type="button" className="mega-library-search-toggle" onClick={toggleLibrarySearchVisible}>
           {librarySearchVisible ? 'Ocultar buscador' : 'Buscar'}

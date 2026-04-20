@@ -2613,3 +2613,26 @@ button:disabled {
   box-shadow: 0 10px 36px rgba(0, 0, 0, 0.5);
 }
 
+.toast--back-exit {
+  position: fixed;
+  left: 50%;
+  bottom: max(0.9rem, calc(env(safe-area-inset-bottom) + 0.5rem));
+  transform: translateX(-50%);
+  z-index: 96;
+  width: fit-content;
+  max-width: min(34rem, calc(100vw - 2rem));
+  margin: 0;
+  background: rgba(24, 20, 36, 0.94);
+  color: #f3f1ff;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  justify-content: center;
+  text-align: center;
+  padding: 0.6rem 0.9rem;
+}
+
+[data-theme='light'] .toast--back-exit {
+  background: rgba(37, 33, 58, 0.94);
+  color: #fff;
+}
+
