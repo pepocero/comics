@@ -1060,16 +1060,26 @@ button:disabled {
 }
 
 .toast {
-  margin: 0 1rem 0.5rem;
-  padding: 0.6rem 0.85rem;
-  background: var(--cr-deep-purple);
-  border: 1px solid var(--cr-border-muted);
-  border-radius: 8px;
-  font-size: 0.88rem;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.5rem;
+  position: fixed;
+  top: max(0.75rem, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 95;
+  width: fit-content;
+  max-width: min(38rem, calc(100vw - 1.2rem));
+  margin: 0;
+  padding: 0.62rem 0.95rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: #fff;
+  background:
+    linear-gradient(140deg, rgba(112, 64, 224, 0.96), rgba(52, 130, 255, 0.94));
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 12px 30px rgba(32, 24, 68, 0.4);
+  backdrop-filter: blur(7px);
+  text-align: center;
+  animation: toast-enter 180ms ease-out;
 }
 
 .toast-close {
@@ -1077,6 +1087,17 @@ button:disabled {
   background: transparent;
   color: #aaa;
   flex-shrink: 0;
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 .comic-viewer {
@@ -2603,14 +2624,7 @@ button:disabled {
 
 /* Toast global (descargas) */
 .toast--global {
-  position: fixed;
-  top: max(0.75rem, env(safe-area-inset-top));
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 95;
-  max-width: min(36rem, calc(100vw - 2rem));
-  margin: 0;
-  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.5);
+  z-index: 96;
 }
 
 .toast--back-exit {

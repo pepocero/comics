@@ -76,6 +76,7 @@ export default function App() {
   const lastPageIndexRef = useRef(0)
   const progressSaveTimerRef = useRef<number | null>(null)
   const backExitToastTimerRef = useRef<number | null>(null)
+  const homeToastTimerRef = useRef<number | null>(null)
   const sectionHistoryRef = useRef<ShellNavId[]>(['home'])
   const suppressSectionHistoryPushRef = useRef(false)
   const lastBackPressMsRef = useRef(0)
@@ -93,8 +94,29 @@ export default function App() {
       if (backExitToastTimerRef.current !== null) {
         window.clearTimeout(backExitToastTimerRef.current)
       }
+      if (homeToastTimerRef.current !== null) {
+        window.clearTimeout(homeToastTimerRef.current)
+      }
     }
   }, [])
+
+  useEffect(() => {
+    if (homeToastTimerRef.current !== null) {
+      window.clearTimeout(homeToastTimerRef.current)
+      homeToastTimerRef.current = null
+    }
+    if (!homeToast) return
+    homeToastTimerRef.current = window.setTimeout(() => {
+      setHomeToast(null)
+      homeToastTimerRef.current = null
+    }, 5000)
+    return () => {
+      if (homeToastTimerRef.current !== null) {
+        window.clearTimeout(homeToastTimerRef.current)
+        homeToastTimerRef.current = null
+      }
+    }
+  }, [homeToast])
 
   useEffect(() => {
     if (suppressSectionHistoryPushRef.current) {
@@ -547,16 +569,8 @@ export default function App() {
     <>
       <PwaUpdateGate />
       {homeToast ? (
-        <div className="toast toast--global" role="status">
+        <div className="toast toast--global" role="status" aria-live="polite">
           {homeToast}
-          <button
-            type="button"
-            className="toast-close"
-            onClick={() => setHomeToast(null)}
-            aria-label="Cerrar aviso"
-          >
-            ×
-          </button>
         </div>
       ) : null}
       {backExitToast ? (

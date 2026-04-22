@@ -53,6 +53,17 @@ type CanvasProps = {
   imageFilter: string
 }
 
+function isPanDebugEnabled(): boolean {
+  try {
+    if (typeof window === 'undefined') return false
+    const w = window as Window & { __CR_DEBUG_PAN__?: boolean }
+    if (w.__CR_DEBUG_PAN__ === true) return true
+    return localStorage.getItem('comicread_debug_pan') === '1'
+  } catch {
+    return false
+  }
+}
+
 function ComicPageCanvas({
   page,
   bodyRef,
@@ -62,6 +73,7 @@ function ComicPageCanvas({
   canNext,
   imageFilter,
 }: CanvasProps) {
+  const panDebug = isPanDebugEnabled()
   const [view, setView] = useState<ViewPanZoom>({ scale: 1, panX: 0, panY: 0 })
   const [originX, setOriginX] = useState(50)
   const [originY, setOriginY] = useState(50)
@@ -77,6 +89,8 @@ function ComicPageCanvas({
     panStartX: number
     panStartY: number
     pointerId: number
+    pointerType: string
+    moveCount: number
   } | null>(null)
 
   const pinchRef = useRef<{
@@ -87,6 +101,8 @@ function ComicPageCanvas({
   } | null>(null)
 
   const tapRef = useRef<{ t: number; x: number; y: number } | null>(null)
+  /** Evita que un doble click accidental tras arrastrar dispare zoom/reset y deje la sensación de bloqueo. */
+  const lastDragEndAtRef = useRef(0)
 
   /** Arrastre con un dedo (respaldo si el puntero no mueve bien en algún dispositivo) */
   const touchPanRef = useRef<{
@@ -97,6 +113,7 @@ function ComicPageCanvas({
   } | null>(null)
 
   const [dragging, setDragging] = useState(false)
+  const lastDebugMoveAtRef = useRef(0)
 
   /** Quita listeners globales de arrastre (ratón/lápiz); evita estado colgado con setPointerCapture. */
   const pointerDragCleanupRef = useRef<(() => void) | null>(null)
@@ -133,12 +150,20 @@ function ComicPageCanvas({
 
   /** Solo el arrastre con puntero (ratón/lápiz/táctil); no borra pinch ni touchPan legacy. */
   const releasePointerDragOnly = useCallback(() => {
+    if (panDebug) {
+      const d = dragRef.current
+      console.debug('[ComicViewer][pan] releasePointerDragOnly', {
+        active: d?.active ?? false,
+        pointerId: d?.pointerId ?? null,
+        capturedCount: capturedPointerIdsRef.current.size,
+      })
+    }
     pointerDragCleanupRef.current?.()
     pointerDragCleanupRef.current = null
     releaseAllPointerCaptureOnStage()
     dragRef.current = null
     setDragging(false)
-  }, [releaseAllPointerCaptureOnStage])
+  }, [panDebug, releaseAllPointerCaptureOnStage])
 
   const clearInteractionState = useCallback(() => {
     releasePointerDragOnly()
@@ -187,6 +212,7 @@ function ComicPageCanvas({
   const onStageClick = useCallback(
     (e: React.MouseEvent) => {
       if (e.detail !== 2) return
+      if (Date.now() - lastDragEndAtRef.current < 320) return
       e.preventDefault()
       e.stopPropagation()
       applyDoubleZoomAt(e.clientX, e.clientY)
@@ -212,6 +238,13 @@ function ComicPageCanvas({
        * de pointermove/up deja el ratón “colgado” (sin pointerup limpio) y Brave/Chrome dejan de panear.
        */
       if (dragRef.current?.active) {
+        if (panDebug) {
+          console.debug('[ComicViewer][pan] wheel ignored while dragging', {
+            pointerId: dragRef.current.pointerId,
+            deltaY: e.deltaY,
+            scale: scaleRef.current,
+          })
+        }
         return
       }
 
@@ -239,10 +272,16 @@ function ComicPageCanvas({
         }
       })
       dblStepRef.current = 0
+      if (panDebug) {
+        console.debug('[ComicViewer][pan] wheel zoom', {
+          deltaY: e.deltaY,
+          nextScale: scaleRef.current,
+        })
+      }
     }
     body.addEventListener('wheel', fn, { passive: false })
     return () => body.removeEventListener('wheel', fn)
-  }, [bodyRef, clearInteractionState])
+  }, [bodyRef, clearInteractionState, panDebug])
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -261,6 +300,16 @@ function ComicPageCanvas({
       const pid = e.pointerId
       const p = panRef.current
       lastPointerMoveAtRef.current = Date.now()
+      if (panDebug) {
+        console.debug('[ComicViewer][pan] pointerdown', {
+          pointerId: pid,
+          pointerType: e.pointerType,
+          button: e.button,
+          scale: scaleRef.current,
+          panX: p.x,
+          panY: p.y,
+        })
+      }
       dragRef.current = {
         active: true,
         startX: e.clientX,
@@ -268,14 +317,29 @@ function ComicPageCanvas({
         panStartX: p.x,
         panStartY: p.y,
         pointerId: pid,
+        pointerType: e.pointerType,
+        moveCount: 0,
       }
       setDragging(true)
 
-      try {
-        stage.setPointerCapture(pid)
-        capturedPointerIdsRef.current.add(pid)
-      } catch {
-        /* ignore */
+      const isMouse = e.pointerType === 'mouse'
+      /**
+       * Brave/Chromium: con rueda + drag, `setPointerCapture` suele provocar `pointercancel` /
+       * `lostpointercapture` y dejan de llegar `pointermove` aunque el botón siga pulsado.
+       * Para ratón usamos solo `window` con capture (sin captura de puntero en el stage).
+       */
+      if (!isMouse) {
+        try {
+          stage.setPointerCapture(pid)
+          capturedPointerIdsRef.current.add(pid)
+        } catch {
+          if (panDebug) {
+            console.debug('[ComicViewer][pan] setPointerCapture failed', { pointerId: pid })
+          }
+          /* ignore */
+        }
+      } else if (panDebug) {
+        console.debug('[ComicViewer][pan] mouse drag: skip setPointerCapture, use window capture')
       }
 
       function move(ev: PointerEvent): void {
@@ -283,45 +347,153 @@ function ComicPageCanvas({
         const d = dragRef.current
         if (!d?.active) return
         lastPointerMoveAtRef.current = Date.now()
+        d.moveCount += 1
         const dx = ev.clientX - d.startX
         const dy = ev.clientY - d.startY
         const nx = d.panStartX + dx
         const ny = d.panStartY + dy
         setView((v) => ({ ...v, panX: nx, panY: ny }))
+        if (panDebug && Date.now() - lastDebugMoveAtRef.current > 120) {
+          lastDebugMoveAtRef.current = Date.now()
+          console.debug('[ComicViewer][pan] pointermove', {
+            pointerId: pid,
+            dx: Math.round(dx),
+            dy: Math.round(dy),
+            nextX: Math.round(nx),
+            nextY: Math.round(ny),
+          })
+        }
       }
 
       function cleanupListeners(): void {
+        if (isMouse) {
+          window.removeEventListener('pointermove', move, { capture: true })
+          window.removeEventListener('pointerup', up, { capture: true })
+          window.removeEventListener('pointercancel', cancelMouseOnWindow, { capture: true })
+          window.removeEventListener('mousemove', mouseMoveFallback)
+          window.removeEventListener('mouseup', mouseUpFallback)
+          return
+        }
         if (!stage) return
         stage.removeEventListener('pointermove', move)
         stage.removeEventListener('pointerup', up)
         stage.removeEventListener('pointercancel', up)
+        window.removeEventListener('mousemove', mouseMoveFallback)
+        window.removeEventListener('mouseup', mouseUpFallback)
+        window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
         window.removeEventListener('pointercancel', up)
       }
 
+      function mouseMoveFallback(ev: MouseEvent): void {
+        const d = dragRef.current
+        if (!d?.active || d.pointerId !== pid || d.pointerType !== 'mouse') return
+        // Respaldo cuando Brave/Chrome pierde pointermove tras wheel+drag.
+        if ((ev.buttons & 1) !== 1) return
+        move(Object.assign(ev, { pointerId: pid }) as PointerEvent)
+      }
+
+      function mouseUpFallback(ev: MouseEvent): void {
+        const d = dragRef.current
+        if (!d?.active || d.pointerId !== pid || d.pointerType !== 'mouse') return
+        finalizeDrag(ev.clientX, ev.clientY, 'mouseup-fallback')
+      }
+
+      function finalizeDrag(
+        clientX: number,
+        clientY: number,
+        reason: 'pointerup' | 'mouseup-fallback' | 'pointercancel',
+      ): void {
+        const d = dragRef.current
+        if (d?.active) {
+          // Solo usamos coordenadas finales en eventos de liberación reales.
+          if (reason !== 'pointercancel') {
+            const finalDx = clientX - d.startX
+            const finalDy = clientY - d.startY
+            const finalX = d.panStartX + finalDx
+            const finalY = d.panStartY + finalDy
+            setView((v) => ({ ...v, panX: finalX, panY: finalY }))
+          }
+          const moved = Math.hypot(clientX - d.startX, clientY - d.startY)
+          if (moved > 6) {
+            lastDragEndAtRef.current = Date.now()
+          }
+          if (panDebug && reason !== 'pointercancel' && d.moveCount <= 1 && moved > 40) {
+            console.debug('[ComicViewer][pan] pointermove dropped; recovered with pointerup final coords', {
+              pointerId: pid,
+              movedPx: Math.round(moved),
+              moveCount: d.moveCount,
+            })
+          }
+        }
+        if (panDebug) {
+          console.debug('[ComicViewer][pan] pointerup', {
+            pointerId: pid,
+            hadDrag: d?.active ?? false,
+            reason,
+            movedPx:
+              d?.active === true
+                ? Math.round(Math.hypot(clientX - d.startX, clientY - d.startY))
+                : 0,
+          })
+        }
+        releasePointerDragOnly()
+      }
+
       function up(ev: PointerEvent): void {
         if (ev.pointerId !== pid) return
+        if (ev.type === 'pointercancel') {
+          finalizeDrag(ev.clientX, ev.clientY, 'pointercancel')
+          return
+        }
+        finalizeDrag(ev.clientX, ev.clientY, 'pointerup')
+      }
+
+      /** Ratón: cancel en window → solo soltar (el último move ya fijó la posición). */
+      function cancelMouseOnWindow(ev: PointerEvent): void {
+        if (ev.pointerId !== pid) return
+        if (panDebug) {
+          console.debug('[ComicViewer][pan] pointercancel (mouse window): end drag', { pointerId: pid })
+        }
         releasePointerDragOnly()
       }
 
       pointerDragCleanupRef.current = cleanupListeners
-      /* Con setPointerCapture en el stage, los eventos van al stage; más fiable que window en Chrome/Brave. */
-      stage.addEventListener('pointermove', move)
-      stage.addEventListener('pointerup', up)
-      stage.addEventListener('pointercancel', up)
-      // Respaldo por si el navegador deja de reenviar eventos al stage tras wheel/zoom.
-      window.addEventListener('pointerup', up)
-      window.addEventListener('pointercancel', up)
+      if (isMouse) {
+        window.addEventListener('pointermove', move, { capture: true })
+        window.addEventListener('pointerup', up, { capture: true })
+        window.addEventListener('pointercancel', cancelMouseOnWindow, { capture: true })
+        window.addEventListener('mousemove', mouseMoveFallback)
+        window.addEventListener('mouseup', mouseUpFallback)
+      } else {
+        /* Con setPointerCapture en el stage, los eventos van al stage; más fiable que window en Chrome/Brave. */
+        stage.addEventListener('pointermove', move)
+        stage.addEventListener('pointerup', up)
+        stage.addEventListener('pointercancel', up)
+        window.addEventListener('mousemove', mouseMoveFallback)
+        window.addEventListener('mouseup', mouseUpFallback)
+        // Respaldo por si el navegador deja de reenviar eventos al stage tras wheel/zoom.
+        window.addEventListener('pointermove', move)
+        window.addEventListener('pointerup', up)
+        window.addEventListener('pointercancel', up)
+      }
     },
-    [releasePointerDragOnly],
+    [panDebug, releasePointerDragOnly],
   )
 
   const onStageLostPointerCapture = useCallback(
     (e: React.PointerEvent) => {
+      if (panDebug) {
+        console.debug('[ComicViewer][pan] lostpointercapture', {
+          pointerId: e.pointerId,
+          draggingPointerId: dragRef.current?.pointerId ?? null,
+          draggingActive: dragRef.current?.active ?? false,
+        })
+      }
       if (dragRef.current?.pointerId !== e.pointerId) return
       releasePointerDragOnly()
     },
-    [releasePointerDragOnly],
+    [panDebug, releasePointerDragOnly],
   )
 
   const onTouchStart = useCallback(
@@ -467,10 +639,17 @@ function ComicPageCanvas({
       const idleMs = Date.now() - lastPointerMoveAtRef.current
       if (idleMs < 1300) return
       // Si no hubo movimiento suficiente tiempo, liberamos el drag para evitar bloqueo del paneo.
+      if (panDebug) {
+        console.debug('[ComicViewer][pan] force release by idle watchdog', {
+          pointerId: d.pointerId,
+          idleMs,
+          capturedCount: capturedPointerIdsRef.current.size,
+        })
+      }
       releasePointerDragOnly()
     }, 220)
     return () => window.clearInterval(timer)
-  }, [dragging, releasePointerDragOnly])
+  }, [dragging, panDebug, releasePointerDragOnly])
 
   /** Pérdida de foco / pestaña: evita puntero “fantasma” a medio arrastre */
   useEffect(() => {
@@ -479,8 +658,15 @@ function ComicPageCanvas({
         clearInteractionState()
       }
     }
+    const onBlur = (): void => {
+      clearInteractionState()
+    }
     document.addEventListener('visibilitychange', onVis)
-    return () => document.removeEventListener('visibilitychange', onVis)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('blur', onBlur)
+    }
   }, [clearInteractionState])
 
   return (

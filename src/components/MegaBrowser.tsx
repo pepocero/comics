@@ -300,6 +300,7 @@ export function MegaBrowser({
   /** Al bajar el scroll se pliega el bloque de búsqueda para ganar espacio al listado. */
   const [librarySearchBarCollapsed, setLibrarySearchBarCollapsed] = useState(false)
   const [refreshingTree, setRefreshingTree] = useState(false)
+  const toastTimerRef = useRef<number | null>(null)
   const lastScrollYRef = useRef(0)
   const scrollDownAccumRef = useRef(0)
   const scrollUpAccumRef = useRef(0)
@@ -314,6 +315,24 @@ export function MegaBrowser({
   useEffect(() => {
     breadcrumbsRef.current = breadcrumbs
   }, [breadcrumbs])
+
+  useEffect(() => {
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current)
+      toastTimerRef.current = null
+    }
+    if (!toast) return
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null)
+      toastTimerRef.current = null
+    }, 5000)
+    return () => {
+      if (toastTimerRef.current !== null) {
+        window.clearTimeout(toastTimerRef.current)
+        toastTimerRef.current = null
+      }
+    }
+  }, [toast])
 
   useEffect(() => {
     if (!root || loadingTree || loadError) return
@@ -869,11 +888,8 @@ export function MegaBrowser({
   return (
     <div className="browser">
       {toast ? (
-        <div className="toast" role="status">
+        <div className="toast" role="status" aria-live="polite">
           {toast}
-          <button type="button" className="toast-close" onClick={() => setToast(null)} aria-label="Cerrar aviso">
-            ×
-          </button>
         </div>
       ) : null}
 
