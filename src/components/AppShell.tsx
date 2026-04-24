@@ -24,6 +24,12 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
 
+function isAppAlreadyInstalled(): boolean {
+  const standaloneByMedia = window.matchMedia('(display-mode: standalone)').matches
+  const iosStandalone = (navigator as Navigator & { standalone?: boolean }).standalone === true
+  return standaloneByMedia || iosStandalone
+}
+
 const NAV: NavItem[] = [
   { id: 'home', label: 'Inicio' },
   { id: 'sources', label: 'Fuentes' },
@@ -76,6 +82,11 @@ export function AppShell({
   }, [])
 
   const handleInstallApp = async (): Promise<void> => {
+    if (isAppAlreadyInstalled()) {
+      setInstallStatus('La app ya esta instalada en este dispositivo.')
+      return
+    }
+
     if (!deferredInstallPrompt) {
       setInstallStatus('La instalacion guiada no esta disponible en este navegador.')
       return

@@ -11,6 +11,12 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
 
+function isAppAlreadyInstalled(): boolean {
+  const standaloneByMedia = window.matchMedia('(display-mode: standalone)').matches
+  const iosStandalone = (navigator as Navigator & { standalone?: boolean }).standalone === true
+  return standaloneByMedia || iosStandalone
+}
+
 export function HomePage({ onGoSources, onGoLibrary, libraryReady }: Props) {
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<BeforeInstallPromptEvent | null>(
     null,
@@ -38,6 +44,11 @@ export function HomePage({ onGoSources, onGoLibrary, libraryReady }: Props) {
   }, [])
 
   const handleInstallApp = async (): Promise<void> => {
+    if (isAppAlreadyInstalled()) {
+      setInstallStatus('La app ya esta instalada en este dispositivo.')
+      return
+    }
+
     if (!deferredInstallPrompt) {
       setInstallStatus('La instalacion guiada no esta disponible en este navegador.')
       return
