@@ -1862,6 +1862,33 @@ button:disabled {
   margin-top: auto;
   padding-top: 1rem;
   border-top: 1px solid var(--cr-border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.app-shell-install-btn {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(90, 106, 184, 0.55);
+  background: rgba(74, 90, 158, 0.18);
+  color: var(--cr-text);
+  text-align: left;
+  font: inherit;
+  font-size: 0.87rem;
+  font-weight: 600;
+}
+
+.app-shell-install-btn:hover {
+  border-color: var(--cr-open-border);
+  background: rgba(74, 90, 158, 0.28);
+}
+
+.app-shell-install-status {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--cr-muted);
 }
 
 .app-shell-settings-btn {
@@ -1928,6 +1955,31 @@ button:disabled {
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--cr-text);
+}
+
+.home-install-cta {
+  width: 100%;
+  margin: 0 0 0.95rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 11px;
+  border: 1px solid rgba(90, 106, 184, 0.55);
+  background: rgba(74, 90, 158, 0.2);
+  color: #fff;
+  text-align: left;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.home-install-cta:hover {
+  border-color: var(--cr-open-border);
+  background: rgba(74, 90, 158, 0.3);
+}
+
+.home-install-status {
+  margin: 0 0 1rem;
+  font-size: 0.8rem;
+  color: var(--cr-muted);
 }
 
 .home-doc-block {

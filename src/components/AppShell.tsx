@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 export type ShellNavId = 'home' | 'sources' | 'library' | 'favorites' | 'downloads' | 'continue'
 
@@ -17,6 +17,11 @@ type Props = {
   /** Ocultar navegación detrás del visor a pantalla completa */
   navHidden?: boolean
   onOpenSettings?: () => void
+}
+
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
 }
 
 const NAV: NavItem[] = [
@@ -37,6 +42,10 @@ export function AppShell({
   onOpenSettings,
 }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<BeforeInstallPromptEvent | null>(
+    null,
+  )
+  const [installStatus, setInstallStatus] = useState('')
 
   const closeDrawer = () => setDrawerOpen(false)
 
@@ -44,6 +53,41 @@ export function AppShell({
     if (id === 'library' && libraryDisabled) return
     onNavigate(id)
     closeDrawer()
+  }
+
+  useEffect(() => {
+    const onBeforeInstallPrompt = (event: Event): void => {
+      event.preventDefault()
+      setDeferredInstallPrompt(event as BeforeInstallPromptEvent)
+      setInstallStatus('')
+    }
+
+    const onAppInstalled = (): void => {
+      setDeferredInstallPrompt(null)
+      setInstallStatus('Aplicacion instalada correctamente.')
+    }
+
+    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt)
+    window.addEventListener('appinstalled', onAppInstalled)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt)
+      window.removeEventListener('appinstalled', onAppInstalled)
+    }
+  }, [])
+
+  const handleInstallApp = async (): Promise<void> => {
+    if (!deferredInstallPrompt) {
+      setInstallStatus('La instalacion guiada no esta disponible en este navegador.')
+      return
+    }
+    await deferredInstallPrompt.prompt()
+    const choice = await deferredInstallPrompt.userChoice
+    if (choice.outcome === 'accepted') {
+      setInstallStatus('Instalando aplicacion en tu telefono...')
+    } else {
+      setInstallStatus('Instalacion cancelada. Puedes intentarlo de nuevo cuando quieras.')
+    }
+    setDeferredInstallPrompt(null)
   }
 
   const navBody = (
@@ -78,13 +122,17 @@ export function AppShell({
           )
         })}
       </ul>
-      {onOpenSettings ? (
-        <div className="app-shell-footer">
+      <div className="app-shell-footer">
+        {onOpenSettings ? (
           <button type="button" className="app-shell-settings-btn" onClick={onOpenSettings}>
             Ajustes de MEGA
           </button>
-        </div>
-      ) : null}
+        ) : null}
+        <button type="button" className="app-shell-install-btn" onClick={handleInstallApp}>
+          Instalar app en tu telefono
+        </button>
+        {installStatus ? <p className="app-shell-install-status">{installStatus}</p> : null}
+      </div>
     </nav>
   )
 

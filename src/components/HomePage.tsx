@@ -1,10 +1,57 @@
+import { useEffect, useState } from 'react'
+
 type Props = {
   onGoSources: () => void
   onGoLibrary: () => void
   libraryReady: boolean
 }
 
+type BeforeInstallPromptEvent = Event & {
+  prompt: () => Promise<void>
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>
+}
+
 export function HomePage({ onGoSources, onGoLibrary, libraryReady }: Props) {
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<BeforeInstallPromptEvent | null>(
+    null,
+  )
+  const [installStatus, setInstallStatus] = useState('')
+
+  useEffect(() => {
+    const onBeforeInstallPrompt = (event: Event): void => {
+      event.preventDefault()
+      setDeferredInstallPrompt(event as BeforeInstallPromptEvent)
+      setInstallStatus('')
+    }
+
+    const onAppInstalled = (): void => {
+      setDeferredInstallPrompt(null)
+      setInstallStatus('Aplicacion instalada correctamente.')
+    }
+
+    window.addEventListener('beforeinstallprompt', onBeforeInstallPrompt)
+    window.addEventListener('appinstalled', onAppInstalled)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt)
+      window.removeEventListener('appinstalled', onAppInstalled)
+    }
+  }, [])
+
+  const handleInstallApp = async (): Promise<void> => {
+    if (!deferredInstallPrompt) {
+      setInstallStatus('La instalacion guiada no esta disponible en este navegador.')
+      return
+    }
+    await deferredInstallPrompt.prompt()
+    const choice = await deferredInstallPrompt.userChoice
+    if (choice.outcome === 'accepted') {
+      setInstallStatus('Instalando aplicacion en tu telefono...')
+    } else {
+      setInstallStatus('Instalacion cancelada. Puedes intentarlo de nuevo cuando quieras.')
+    }
+    setDeferredInstallPrompt(null)
+  }
+
   return (
     <div className="home-page">
       <header className="home-header">
@@ -20,6 +67,10 @@ export function HomePage({ onGoSources, onGoLibrary, libraryReady }: Props) {
 
       <article className="home-doc">
         <h2 className="home-doc-title">Cómo funciona</h2>
+        <button type="button" className="home-install-cta" onClick={handleInstallApp}>
+          Instalar app en tu telefono
+        </button>
+        {installStatus ? <p className="home-install-status">{installStatus}</p> : null}
 
         <section className="home-doc-block" aria-labelledby="home-fuentes">
           <h3 id="home-fuentes" className="home-doc-h3">
