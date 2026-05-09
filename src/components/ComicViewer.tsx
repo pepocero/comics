@@ -15,6 +15,13 @@ import {
   type ImageAdjustState,
 } from '../lib/imageAdjust'
 import { computeSmartImageAdjust } from '../lib/smartImageAdjust'
+import {
+  loadRotationLockPreference,
+  releaseRotationLock,
+  requestRotationLock,
+  saveRotationLockPreference,
+  supportsScreenOrientationLock,
+} from '../lib/screenRotationLock'
 
 export type ViewerPage = {
   name: string
@@ -750,6 +757,13 @@ export function ComicViewer({
   const [smartError, setSmartError] = useState<string | null>(null)
   const [smartRerunKey, setSmartRerunKey] = useState(0)
 
+  const viewerRootRef = useRef<HTMLDivElement>(null)
+  const usedFullscreenForLockRef = useRef(false)
+  const rotationLockToastTimerRef = useRef<number | null>(null)
+  const [isMobileViewport, setIsMobileViewport] = useState(false)
+  const [rotationLocked, setRotationLocked] = useState(false)
+  const [rotationLockMessage, setRotationLockMessage] = useState<string | null>(null)
+
   const pageUrl = pages[index]?.url ?? ''
 
   const imageFilter = useMemo(() => buildImageFilterCss(imageAdjust), [imageAdjust])
@@ -764,6 +778,66 @@ export function ComicViewer({
     document.body.style.overflow = 'hidden'
     return () => {
       document.body.style.overflow = prev
+    }
+  }, [])
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 899px)')
+    const sync = (): void => {
+      setIsMobileViewport(mq.matches)
+    }
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+
+  useEffect(() => {
+    if (!supportsScreenOrientationLock()) return
+    if (!loadRotationLockPreference()) return
+    const t = window.setTimeout(() => {
+      void (async () => {
+        const host = viewerRootRef.current
+        const res = await requestRotationLock(host)
+        if (res.ok) {
+          usedFullscreenForLockRef.current = res.usedFullscreen
+          setRotationLocked(true)
+        } else {
+          saveRotationLockPreference(false)
+        }
+      })()
+    }, 0)
+    return () => window.clearTimeout(t)
+  }, [])
+
+  useEffect(() => {
+    const clearLockAndFs = (): void => {
+      releaseRotationLock()
+      if (!usedFullscreenForLockRef.current) return
+      usedFullscreenForLockRef.current = false
+      if (document.fullscreenElement) {
+        void document.exitFullscreen?.().catch(() => {})
+      }
+    }
+
+    const onFullscreenChange = (): void => {
+      const host = viewerRootRef.current
+      if (!host) return
+      if (document.fullscreenElement === host) return
+      if (!usedFullscreenForLockRef.current) return
+      usedFullscreenForLockRef.current = false
+      releaseRotationLock()
+      setRotationLocked(false)
+      saveRotationLockPreference(false)
+    }
+
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange)
+      clearLockAndFs()
+      if (rotationLockToastTimerRef.current != null) {
+        window.clearTimeout(rotationLockToastTimerRef.current)
+        rotationLockToastTimerRef.current = null
+      }
     }
   }, [])
 
@@ -854,13 +928,61 @@ export function ComicViewer({
     }
   }, [adjustPanelOpen, goNext, goPrev, onClose, pagesPanelOpen])
 
+  const showRotationLockControl =
+    isMobileViewport && supportsScreenOrientationLock()
+
+  const onRotationLockToggle = useCallback(async () => {
+    if (rotationLocked) {
+      releaseRotationLock()
+      if (usedFullscreenForLockRef.current) {
+        usedFullscreenForLockRef.current = false
+        const doc = document as Document & { webkitExitFullscreen?: () => void }
+        try {
+          if (document.fullscreenElement) {
+            await document.exitFullscreen()
+          } else {
+            doc.webkitExitFullscreen?.()
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      saveRotationLockPreference(false)
+      setRotationLocked(false)
+      setRotationLockMessage(null)
+      if (rotationLockToastTimerRef.current != null) {
+        window.clearTimeout(rotationLockToastTimerRef.current)
+        rotationLockToastTimerRef.current = null
+      }
+      return
+    }
+
+    const host = viewerRootRef.current
+    const res = await requestRotationLock(host)
+    if (res.ok) {
+      usedFullscreenForLockRef.current = res.usedFullscreen
+      saveRotationLockPreference(true)
+      setRotationLocked(true)
+      setRotationLockMessage(null)
+    } else {
+      setRotationLockMessage(res.message)
+      if (rotationLockToastTimerRef.current != null) {
+        window.clearTimeout(rotationLockToastTimerRef.current)
+      }
+      rotationLockToastTimerRef.current = window.setTimeout(() => {
+        setRotationLockMessage(null)
+        rotationLockToastTimerRef.current = null
+      }, 7000)
+    }
+  }, [rotationLocked])
+
   const page = pages[index]
   if (!page) {
     return null
   }
 
   return (
-    <div className="comic-viewer" role="dialog" aria-label="Visor de cómic">
+    <div ref={viewerRootRef} className="comic-viewer" role="dialog" aria-label="Visor de cómic">
       <svg
         className="comic-filter-defs"
         xmlns="http://www.w3.org/2000/svg"
@@ -951,6 +1073,24 @@ export function ComicViewer({
           >
             ⟲
           </button>
+          {showRotationLockControl ? (
+            <button
+              type="button"
+              className={`comic-rotation-lock-trigger${rotationLocked ? ' comic-rotation-lock-trigger--locked' : ''}`}
+              onClick={() => void onRotationLockToggle()}
+              title={
+                rotationLocked
+                  ? 'Permitir que la pantalla gire al inclinar el teléfono'
+                  : 'Fijar la orientación actual (evita giros molestos al leer tumbado)'
+              }
+              aria-pressed={rotationLocked}
+              aria-label={
+                rotationLocked ? 'Permitir rotación de pantalla' : 'Bloquear rotación de pantalla'
+              }
+            >
+              {rotationLocked ? '🔒' : '🔓'}
+            </button>
+          ) : null}
           <div className="comic-adjust-wrap" ref={adjustWrapRef}>
             <button
               type="button"
@@ -1191,6 +1331,12 @@ export function ComicViewer({
           imageFilter={imageFilter}
         />
       </div>
+
+      {rotationLockMessage ? (
+        <p className="toast comic-viewer-orientation-hint" role="alert">
+          {rotationLockMessage}
+        </p>
+      ) : null}
     </div>
   )
 }

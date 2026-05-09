@@ -563,6 +563,20 @@ export function MegaBrowser({
     setBreadcrumbs((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev))
   }, [])
 
+  useEffect(() => {
+    const onLibraryBack = (event: Event): void => {
+      const customEvent = event as CustomEvent<{ handled: boolean }>
+      const trail = breadcrumbsRef.current
+      if (trail.length <= 1) return
+      setBreadcrumbs((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev))
+      customEvent.detail.handled = true
+    }
+    window.addEventListener('comicread:library-back', onLibraryBack as EventListener)
+    return () => {
+      window.removeEventListener('comicread:library-back', onLibraryBack as EventListener)
+    }
+  }, [])
+
   const clearLibrarySearch = useCallback(() => {
     setLibrarySearchDraft('')
     setLibrarySearchCommitted('')

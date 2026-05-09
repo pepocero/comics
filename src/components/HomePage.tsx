@@ -22,6 +22,7 @@ export function HomePage({ onGoSources, onGoLibrary, libraryReady }: Props) {
     null,
   )
   const [installStatus, setInstallStatus] = useState('')
+  const [showInstalledModal, setShowInstalledModal] = useState(false)
 
   useEffect(() => {
     const onBeforeInstallPrompt = (event: Event): void => {
@@ -45,7 +46,7 @@ export function HomePage({ onGoSources, onGoLibrary, libraryReady }: Props) {
 
   const handleInstallApp = async (): Promise<void> => {
     if (isAppAlreadyInstalled()) {
-      setInstallStatus('La app ya esta instalada en este dispositivo.')
+      setShowInstalledModal(true)
       return
     }
 
@@ -82,6 +83,32 @@ export function HomePage({ onGoSources, onGoLibrary, libraryReady }: Props) {
           Instalar app en tu telefono
         </button>
         {installStatus ? <p className="home-install-status">{installStatus}</p> : null}
+        {showInstalledModal ? (
+          <div
+            className="cr-modal-backdrop"
+            role="presentation"
+            onClick={() => setShowInstalledModal(false)}
+          >
+            <div
+              className="cr-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Aplicación ya instalada"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="cr-modal-message">La app ya esta instalada en este dispositivo.</p>
+              <div className="cr-modal-actions">
+                <button
+                  type="button"
+                  className="home-install-cta"
+                  onClick={() => setShowInstalledModal(false)}
+                >
+                  Aceptar
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <section className="home-doc-block" aria-labelledby="home-fuentes">
           <h3 id="home-fuentes" className="home-doc-h3">

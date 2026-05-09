@@ -35,8 +35,10 @@ export function SourcePicker({ sources, onSelect, onOpenLocalComic }: Props) {
     <section className="panel source-picker">
       <h1 className="source-picker-title">Fuentes de lectura</h1>
       <p className="lead source-picker-lead-box">
-        Elige la cuenta de MEGA en la configuración de la app. Cada fuente apunta a una carpeta; luego
-        podrás explorarla en la biblioteca.
+        Elige una de las fuentes de abajo: cada una enlaza a una carpeta de MEGA con una colección de
+        cómics concreta. Al seleccionarla, verás su contenido en <strong>Biblioteca MEGA</strong>. Si
+        sales y vuelves a entrar en esa sección, se seguirá usando la última fuente elegida hasta que
+        cambies a otra.
       </p>
       <ul className="source-list">
         {sources.map((s) => (

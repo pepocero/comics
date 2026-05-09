@@ -52,6 +52,7 @@ export function AppShell({
     null,
   )
   const [installStatus, setInstallStatus] = useState('')
+  const [showInstalledModal, setShowInstalledModal] = useState(false)
 
   const closeDrawer = () => setDrawerOpen(false)
 
@@ -83,7 +84,7 @@ export function AppShell({
 
   const handleInstallApp = async (): Promise<void> => {
     if (isAppAlreadyInstalled()) {
-      setInstallStatus('La app ya esta instalada en este dispositivo.')
+      setShowInstalledModal(true)
       return
     }
 
@@ -194,6 +195,33 @@ export function AppShell({
             </div>
             {navBody}
           </aside>
+        </div>
+      ) : null}
+
+      {showInstalledModal ? (
+        <div
+          className="cr-modal-backdrop"
+          role="presentation"
+          onClick={() => setShowInstalledModal(false)}
+        >
+          <div
+            className="cr-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Aplicación ya instalada"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="cr-modal-message">La app ya esta instalada en este dispositivo.</p>
+            <div className="cr-modal-actions">
+              <button
+                type="button"
+                className="app-shell-install-btn"
+                onClick={() => setShowInstalledModal(false)}
+              >
+                Aceptar
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 

@@ -1207,6 +1207,22 @@ button:disabled {
   background: var(--cr-border-strong);
 }
 
+.comic-rotation-lock-trigger {
+  padding: 0.4rem 0.55rem;
+  min-width: 2.5rem;
+  font-size: 1.05rem;
+  line-height: 1;
+  background: var(--cr-border-strong);
+}
+
+.comic-rotation-lock-trigger--locked {
+  background: var(--cr-pages-open-bg);
+}
+
+.comic-viewer-orientation-hint.toast {
+  z-index: 280;
+}
+
 .comic-pages-trigger--open {
   background: var(--cr-pages-open-bg);
 }
@@ -1903,6 +1919,45 @@ button:disabled {
 .app-shell-settings-btn:hover {
   border-color: var(--cr-open-border);
   color: var(--cr-text);
+}
+
+.cr-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(5, 7, 16, 0.64);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.cr-modal {
+  width: min(28rem, calc(100vw - 2rem));
+  border-radius: 12px;
+  border: 1px solid var(--cr-border-soft);
+  background: var(--cr-elevated);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.4);
+  padding: 1rem 1rem 0.9rem;
+}
+
+.cr-modal-message {
+  margin: 0 0 0.8rem;
+  color: var(--cr-text);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.cr-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cr-modal-actions .app-shell-install-btn,
+.cr-modal-actions .home-install-cta {
+  width: auto;
+  margin: 0;
+  text-align: center;
 }
 
 /* ——— Inicio ——— */

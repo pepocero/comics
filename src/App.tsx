@@ -379,6 +379,14 @@ export default function App() {
       return true
     }
 
+    if (sectionHistoryRef.current[sectionHistoryRef.current.length - 1] === 'library') {
+      const detail = { handled: false }
+      window.dispatchEvent(new CustomEvent('comicread:library-back', { detail }))
+      if (detail.handled) {
+        return true
+      }
+    }
+
     const stack = sectionHistoryRef.current
     if (stack.length > 1) {
       stack.pop()
